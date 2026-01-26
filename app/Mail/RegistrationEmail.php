@@ -30,7 +30,7 @@ class RegistrationEmail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Registration Email',
+            subject: 'RM Novanet Registration Email',
         );
     }
 

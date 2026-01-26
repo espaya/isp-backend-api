@@ -3,25 +3,41 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\RegistrationEmail;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
     public function register(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
+            'name' => ['required', 'string', 'max:255', 'unique:users', 'regex:/^[a-zA-Z0-9](?:[a-zA-Z0-9._]{1,18}[a-zA-Z0-9])$/'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'password' => [
+                'required',
+                'string',
+                'confirmed',
+                Password::min(8)
+                    ->mixedCase()
+                    ->letters()
+                    ->numbers()
+                    ->symbols()
+                    ->uncompromised()
+            ],
+
         ], [
             'name.required' => 'The name field is required.',
             'name.string' => 'The name must be a string.',
             'name.max' => 'The name may not be greater than 255 characters.',
+            'name.unique' => 'Username already exists',
+            'name.regex' => 'The name format is invalid. It should be 3-20 characters long and can include letters, numbers, dots, and underscores, but cannot start or end with a dot or underscore.',
             'email.required' => 'The email field is required.',
             'email.string' => 'The email must be a string.',
             'email.email' => 'The email must be a valid email address.',
@@ -29,7 +45,6 @@ class AuthController extends Controller
             'email.unique' => 'The email has already been taken.',
             'password.required' => 'The password field is required.',
             'password.string' => 'The password must be a string.',
-            'password.min' => 'The password must be at least 8 characters.',
             'password.confirmed' => 'The password confirmation does not match.',
         ]);
 
@@ -43,16 +58,18 @@ class AuthController extends Controller
                 'role' => 'user'
             ]);
 
+
+            // $token = $user->createToken('auth_token')->plainTextToken;
+
             DB::commit();
 
-            $token = $user->createToken('auth_token')->plainTextToken;
 
-            // send confirmation email here (omitted for brevity)
+            // send confirmation email here
+            // Mail::to($user->email)->send(new RegistrationEmail($user));
 
             return response()->json([
-                'token' => $token,
-                'user' => $user
-            ], 201);
+                'message' => 'Registration successful, use your credentials to login',
+            ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Registration failed: ' . $e->getMessage());
@@ -70,7 +87,9 @@ class AuthController extends Controller
         ]);
 
         try {
-            $user = User::where('email', $request->email)->first();
+            $user = User::where('email', $request->email)
+                ->orWhere('name', $request->email)
+                ->first();
 
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
@@ -78,11 +97,17 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // Rotate existing tokens
-            $request->session()->regenerate();
-            
+            Auth::login($user); // ✅ login the user (session attached automatically)
+
+            $redirectUrl = match ($user->role) {
+                'admin' => '/admin/dashboard',
+                'user' => '/dashboard',
+                default => '/dashboard',
+            };
+
             return response()->json([
-                'user' => Auth::user(),
+                'user' => $user,
+                'redirect_url' => $redirectUrl
             ], 200);
         } catch (\Exception $e) {
             Log::error('Login failed: ' . $e->getMessage());
@@ -91,6 +116,7 @@ class AuthController extends Controller
             ], 500);
         }
     }
+
 
     public function logout(Request $request)
     {
