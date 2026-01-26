@@ -2,14 +2,19 @@
 
 use App\Http\Controllers\Api\AuthController;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
+
 
 Route::middleware('throttle:register')->post('/register', [AuthController::class, 'register']);
-Route::middleware('throttle:login')->post('/login', [AuthController::class, 'login'])->name('login');
-Route::middleware('throttle:login')->get('/login', function () {
-    return response()->json(['message' => 'Please use POST method to login.'], 405);
-});
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware([
+    EnsureFrontendRequestsAreStateful::class,
+    'throttle:login',
+])->post('/login', [AuthController::class, 'login'])->name('login');
+
+
+
+Route::middleware(['auth:sanctum', 'web'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/user', [AuthController::class, 'me']);
 });

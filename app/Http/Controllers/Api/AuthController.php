@@ -82,11 +82,12 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email' => 'required|string|email',
+            'email' => 'required|string',
             'password' => 'required|string',
         ]);
 
         try {
+
             $user = User::where('email', $request->email)
                 ->orWhere('name', $request->email)
                 ->first();
@@ -97,12 +98,14 @@ class AuthController extends Controller
                 ], 401);
             }
 
+            $request->session()->regenerate();
+
             Auth::login($user); // ✅ login the user (session attached automatically)
 
             $redirectUrl = match ($user->role) {
                 'admin' => '/admin/dashboard',
                 'user' => '/dashboard',
-                default => '/dashboard',
+                default => '/',
             };
 
             return response()->json([
@@ -136,8 +139,12 @@ class AuthController extends Controller
         }
     }
 
+    // In your AuthController
     public function me(Request $request)
     {
-        return response()->json($request->user());
+        return response()->json([
+            'user' => $request->user(),
+            'authenticated' => true,
+        ]);
     }
 }
