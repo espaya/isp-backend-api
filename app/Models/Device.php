@@ -14,5 +14,15 @@ class Device extends Model
         'monitorEnabled',
         'snmpCommunity',
         'model',
+        'api_user',
+        'api_password',
+        'latitude',
+        'longitude',
+        'coverage_radius_km',
+        'signal_strength',
+        'max_clients',
+        'current_clients',
+        'device_type',
+        'status'
     ];
 }

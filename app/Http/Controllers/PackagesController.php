@@ -36,7 +36,8 @@ class PackagesController extends Controller
             'dataLimit' => ['nullable', 'numeric', 'min:0'], // null = unlimited
             'isActive' => ['nullable', 'boolean'],
             'description' => ['required', 'string'],
-            'devices' => ['nullable', 'numeric', 'min:1']
+            'devices' => ['nullable', 'numeric', 'min:1'],
+            'type' => ['required', 'string', 'in:daily,weekly,monthly,special']
         ], [
             'name.required' => 'Package name is required.',
             'name.unique' => 'A package with this name already exists.',
@@ -53,6 +54,10 @@ class PackagesController extends Controller
             'dataLimit.numeric' => 'Data limit must be a number.',
 
             'description.required' => 'Description is required.',
+
+            'type.required' => 'Package type is required',
+            'type.string' => 'Type must be a valid string',
+            'type.in' => 'Invalid package type'
         ]);
 
         DB::beginTransaction();
@@ -69,6 +74,7 @@ class PackagesController extends Controller
                 'validity' => $request->validity,
                 'description' => $request->description,
                 'devices' => $request->devices ? $request->devices : "Unlimited",
+                'type' => $request->type
             ]);
 
             DB::commit();
@@ -106,7 +112,8 @@ class PackagesController extends Controller
             'dataLimit' => ['nullable', 'numeric', 'min:0'], // null = unlimited
             'isActive' => ['nullable', 'boolean'],
             'description' => ['required', 'string'],
-            'devices' => ['nullable', 'numeric', 'min:1']
+            'devices' => ['nullable', 'numeric', 'min:1'],
+            'type' => ['required', 'string', 'in:daily,weekly,monthly,special']
         ], [
             'name.required' => 'Package name is required.',
             'name.unique' => 'A package with this name already exists.',
@@ -123,6 +130,10 @@ class PackagesController extends Controller
             'dataLimit.numeric' => 'Data limit must be a number.',
 
             'description.required' => 'Description is required.',
+
+            'type.required' => 'Package type is required',
+            'type.string' => 'Type must be a valid string',
+            'type.in' => 'Invalid package type'
         ]);
 
         DB::beginTransaction();
@@ -144,6 +155,7 @@ class PackagesController extends Controller
                 'isActive' => $request->isActive ?? 0, // default false if not set
                 'description' => $request->description,
                 'devices' => $request->devices ? $request->devices : "Unlimited",
+                'type' => $request->type
             ]);
 
             if ($package->isDirty()) {

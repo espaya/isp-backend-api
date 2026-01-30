@@ -14,6 +14,7 @@ class Packages extends Model
         'dataLimit',
         'isActive',
         'description',
-        'devices'
+        'devices',
+        'type'
     ];
 }
