@@ -11,7 +11,9 @@ class DeviceSelectorService
     {
         $devices = Device::where('status', 'online')
             ->whereColumn('current_clients', '<', 'max_clients')
-            ->get();
+            ->orderByDesc('signal_strength')
+            ->orderBy('current_clients')
+            ->first();
 
         if ($devices->isEmpty()) {
             throw new Exception('No available MikroTik device');

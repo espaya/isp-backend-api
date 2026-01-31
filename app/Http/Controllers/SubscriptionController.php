@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Device;
 use App\Models\Packages;
 use App\Models\Subscription;
+use App\Services\DeviceSelectorService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,7 +21,7 @@ class SubscriptionController extends Controller
     public function index()
     {
         try {
-            $packages = Packages::orderBy('name', 'ASC')->paginate(10);
+            $packages = Packages::where('isActive', 1)->orderBy('name', 'ASC')->paginate(10);
 
             if ($packages->isEmpty()) {
                 return response()->json(['message' => 'No packages found'], 404);
@@ -103,7 +105,19 @@ class SubscriptionController extends Controller
                 'is_renewable' => true,
             ]);
 
-            $mikrotik = new MikrotikService();
+            $selector = new DeviceSelectorService();
+
+            // You can get these from captive portal OR IP lookup
+            $lat = $request->latitude ?? null;
+            $lng = $request->longitude ?? null;
+
+            $device = $selector->selectBestDevice($lat, $lng);
+
+            if (!$device) {
+                throw new Exception('No available MikroTik device');
+            }
+
+            $mikrotik = new MikrotikService($device);
 
             // Create or update hotspot user
             $hotspotPassword = Str::random(8);
@@ -114,6 +128,9 @@ class SubscriptionController extends Controller
                 profile: $package->mikrotik_profile, // VERY IMPORTANT
                 expiresAt: $endsAt
             );
+
+            // track load
+            $device->increment('current_clients');
 
             DB::commit();
 
@@ -210,18 +227,41 @@ class SubscriptionController extends Controller
     {
         try {
             $user = Auth::user();
-            $mikrotik = new MikrotikService();
 
-            $usage = $mikrotik->getUserDataUsage($user->email);
+            // 🔥 Determine best / assigned device
+            $selector = new DeviceSelectorService();
 
-            if (!$usage) {
-                return response()->json(['message' => 'User not found on hotspot'], 404);
+            // Prefer saved subscription device
+            $subscription = $user->subscriptions()
+                ->where('status', 'active')
+                ->latest()
+                ->first();
+
+            if (!$subscription || !$subscription->device) {
+                return response()->json([
+                    'message' => 'No active device found for user'
+                ], 404);
             }
 
-            return response()->json($usage);
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
-            return response()->json(['message' => 'Failed to fetch data usage'], 500);
+            $device = $subscription->device;
+
+            // 🔌 Connect to MikroTik
+            $mikrotik = new MikrotikService($device);
+
+            // 📊 Get usage
+            $usageBytes = $mikrotik->getUserUsage($user->email);
+
+            return response()->json([
+                'bytes_used' => $usageBytes,
+                'mb_used'    => round($usageBytes / 1024 / 1024, 2),
+                'gb_used'    => round($usageBytes / 1024 / 1024 / 1024, 2),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Data usage error: ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Failed to fetch data usage'
+            ], 500);
         }
     }
 }

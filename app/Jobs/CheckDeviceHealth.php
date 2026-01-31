@@ -8,23 +8,14 @@ use App\Services\MikrotikService;
 class CheckDeviceHealth
 {
     public function handle()
-    { 
-        Device::all()->each(function ($device) {
+    {
+        Device::all()->each(function (Device $device) {
             try {
-                $mikrotik = new MikrotikService(
-                    host: $device->host,
-                    username: $device->username,
-                    password: $device->password,
-                    port: $device->api_port ?? 8728
-                );
-
-                // Attempt a simple query to check health
-                $mikrotik->getUserDataUsage('testuser'); // or just connect
-
+                new MikrotikService($device );
                 $device->update(['status' => 'online']);
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $device->update(['status' => 'offline']);
             }
         });
-    } 
+    }
 }

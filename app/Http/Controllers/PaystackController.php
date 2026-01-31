@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\PaymentReceiptMail;
 use App\Models\Packages;
 use App\Models\Payment;
+use App\Models\PaymentAuthorization;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\MikrotikService;
@@ -15,6 +17,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use \Illuminate\Support\Str;
 use App\Services\DeviceSelectorService;
+use Illuminate\Support\Facades\Mail;
 
 class PaystackController extends Controller
 {
@@ -248,24 +251,18 @@ class PaystackController extends Controller
                 'status' => 'active',
             ]);
 
-            // 4️⃣ Select the best MikroTik device
-            $lat = $request->latitude;
-            $lng = $request->longitude;
-
             $selector = new DeviceSelectorService();
-            $device = $selector->selectBestDevice($lat, $lng);
+
+            $device = $selector->selectBestDevice(
+                $request->latitude,
+                $request->longitude
+            );
 
             if (!$device) {
-                throw new Exception('No MikroTik device available for this location');
+                throw new Exception('No available MikroTik device');
             }
 
-            // 5️⃣ Provision user on MikroTik
-            $mikrotik = new MikrotikService(
-                host: $device->host,
-                username: $device->username,
-                password: $device->password,
-                port: $device->api_port ?? 8728
-            );
+            $mikrotik = new MikrotikService($device);
 
             $mikrotik->createOrUpdateHotspotUser(
                 username: $user->email,
@@ -274,8 +271,26 @@ class PaystackController extends Controller
                 expiresAt: $subscription->expires_at
             );
 
-            // 6️⃣ Increment device load atomically
             $device->increment('current_clients');
+
+            // Send email to user
+            Mail::to($user->email)->queue(new PaymentReceiptMail($user, $payment, $package));
+
+            $authorization = $data['data']['authorization'] ?? null;
+
+            if ($authorization && $data['data']['channel'] === 'card') {
+                PaymentAuthorization::updateOrCreate(
+                    ['user_id' => $userId],
+                    [
+                        'authorization_code' => $authorization['authorization_code'],
+                        'card_type' => $authorization['card_type'] ?? null,
+                        'last4' => $authorization['last4'] ?? null,
+                        'exp_month' => $authorization['exp_month'] ?? null,
+                        'exp_year' => $authorization['exp_year'] ?? null,
+                        'bank' => $authorization['bank'] ?? null,
+                    ]
+                );
+            }
 
             DB::commit();
 
