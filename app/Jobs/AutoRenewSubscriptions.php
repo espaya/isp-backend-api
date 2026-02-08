@@ -42,11 +42,13 @@ class AutoRenewSubscriptions
                 }
 
                 // Extend subscription
+                $startsAt = now();
                 $sub->update([
                     'expires_at' => match ($package->type) {
-                        'daily' => now()->endOfDay(),
-                        'weekly' => now()->addWeek(),
-                        'monthly' => now()->addMonth(),
+                        'daily'   => $startsAt->copy()->addDay()->subSecond(),
+                        'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
+                        'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
+                        default => throw new \Exception('Invalid package type'),
                     },
                 ]);
 

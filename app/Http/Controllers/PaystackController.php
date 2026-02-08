@@ -240,21 +240,22 @@ class PaystackController extends Controller
             $password = Str::random(8);
 
             // 3️⃣ Create subscription
+            $startsAt = now();
+
             $subscription = Subscription::create([
                 'user_id' => $user->id,
                 'package_id' => $package->id,
                 'payment_id' => $payment->id,
-                'starts_at' => now(),
+                'starts_at' => $startsAt,
                 'expires_at' => match ($package->type) {
-                    'daily' => now()->endOfDay(),
-                    'weekly' => now()->addWeek(),
-                    'monthly' => now()->addMonth(),
-                    default => throw new Exception('Invalid package type'),
+                    'daily'   => $startsAt->copy()->addDay()->subSecond(),
+                    'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
+                    'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
+                    default   => throw new Exception('Invalid package type'),
                 },
                 'status' => 'active',
-                'hotspot_password' => $password
+                'hotspot_password' => $password,
             ]);
-
 
             $selector = new DeviceSelectorService();
             $device = $selector->selectBestDevice(
@@ -320,7 +321,6 @@ class PaystackController extends Controller
             return response()->json(['message' => 'An unexpected error occurred', 'error' => $ex->getMessage()], 500);
         }
     }
-
 
     public function callback(Request $request)
     {

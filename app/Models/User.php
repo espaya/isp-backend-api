@@ -23,7 +23,8 @@ class User extends Authenticatable
         'email',
         'password',
         'status',
-        'role'
+        'role',
+
     ];
 
     /**
@@ -57,6 +58,11 @@ class User extends Authenticatable
     public function subscriptions(): HasMany 
     {
         return $this->hasMany(Subscription::class);
+    }
+
+    public function profile()
+    {
+        return $this->hasOne(Profile::class, 'user_id');
     }
 
 }

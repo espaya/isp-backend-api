@@ -127,9 +127,7 @@ class AuthController extends Controller
             /**
              * PORTAL LOGIN (Admin/User dashboard)
              */
-            $user = User::where('email', $request->email)
-                ->orWhere('name', $request->email)
-                ->first();
+            $user = User::where('email', $request->email)->first();
 
             if (!$user || !Hash::check($request->password, $user->password)) {
                 return response()->json([
@@ -158,8 +156,6 @@ class AuthController extends Controller
             ], 500);
         }
     }
-
-
 
     public function logout(Request $request)
     {

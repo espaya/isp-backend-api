@@ -91,11 +91,12 @@ class SubscriptionController extends Controller
             $startsAt = Carbon::now();
 
             $endsAt = match ($package->type) {
-                'daily'   => Carbon::now()->endOfDay(),
-                'weekly'  => Carbon::now()->addWeek(),
-                'monthly' => Carbon::now()->addMonth(),
+                'daily'   => $startsAt->copy()->addDay()->subSecond(),
+                'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
+                'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
                 default   => throw new Exception('Invalid package type'),
             };
+
 
             // Create subscription
             $subscription = Subscription::create([

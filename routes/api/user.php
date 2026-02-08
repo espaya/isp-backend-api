@@ -34,6 +34,8 @@ Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
 
     // account
     Route::get('/my-account', [UsersController::class, 'authUser']);
+    Route::post('/update-profile', [UsersController::class, 'update']);
+    Route::post('/update-password', [UsersController::class, 'updatePassword']);
 });
 
 Route::middleware('web')->group(function () {
