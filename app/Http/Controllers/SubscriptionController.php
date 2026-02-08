@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Device;
 use App\Models\Packages;
+use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\DeviceSelectorService;
 use Exception;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Services\MikrotikService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 
@@ -76,6 +78,8 @@ class SubscriptionController extends Controller
         $request->validate([
             'package_id' => 'required|exists:packages,id',
             'payment_id' => 'nullable|exists:payments,id',
+            'ip' => 'required|ip',
+            'mac' => 'required|regex:/^([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})$/',
         ]);
 
         DB::beginTransaction();
@@ -84,12 +88,12 @@ class SubscriptionController extends Controller
             $user = Auth::user();
             $package = Packages::findOrFail($request->package_id);
 
-            $startsAt = now();
+            $startsAt = Carbon::now();
 
             $endsAt = match ($package->type) {
-                'daily'   => now()->endOfDay(),
-                'weekly'  => now()->addWeek(),
-                'monthly' => now()->addMonth(),
+                'daily'   => Carbon::now()->endOfDay(),
+                'weekly'  => Carbon::now()->addWeek(),
+                'monthly' => Carbon::now()->addMonth(),
                 default   => throw new Exception('Invalid package type'),
             };
 
@@ -127,6 +131,14 @@ class SubscriptionController extends Controller
                 password: $hotspotPassword,
                 profile: $package->mikrotik_profile, // VERY IMPORTANT
                 expiresAt: $endsAt
+            );
+
+            // sign user in to hotspot internet
+            $mikrotik->loginUserToInternet(
+                username: $user->email,
+                password: $hotspotPassword,
+                ip: $request->input('ip'), // client's IP
+                mac: $request->input('mac') // client's MAC address
             );
 
             // track load
@@ -228,6 +240,8 @@ class SubscriptionController extends Controller
         try {
             $user = Auth::user();
 
+            if (!$user) return response()->json(['message' => 'Cannot identify current user'], 404);
+
             // 🔥 Determine best / assigned device
             $selector = new DeviceSelectorService();
 
@@ -262,6 +276,40 @@ class SubscriptionController extends Controller
             return response()->json([
                 'message' => 'Failed to fetch data usage'
             ], 500);
+        }
+    }
+
+    public function showByReference($reference)
+    {
+        try {
+            // Find the payment ID
+            $payment_id = Payment::where('reference', $reference)->value('id');
+
+            if (!$payment_id) {
+                return response()->json(['message' => 'Payment not found'], 404);
+            }
+
+            // Get the subscription for the logged-in user
+            $subscription = Subscription::with('mikrotikDevice') // eager load device
+                ->where('payment_id', $payment_id)
+                ->where('user_id', Auth::id())
+                ->first();
+
+            if (!$subscription) {
+                return response()->json(['message' => 'Subscription not found'], 404);
+            }
+
+            // Safely get device name if it exists
+            $deviceName = $subscription->mikrotikDevice?->name ?? null;
+
+            return response()->json([
+                'device' => $deviceName,
+                'subscription' => $subscription,
+                'hotspot_password' => $subscription->hotspot_password,
+            ]);
+        } catch (Exception $ex) {
+            Log::error('showByReference(): ' . $ex->getMessage() . ' on line ' . $ex->getLine());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
         }
     }
 }

@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Mail\RegistrationEmail;
+use App\Models\Device;
 use App\Models\User;
+use App\Services\MikrotikService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -82,12 +84,49 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
+            'login_type' => 'nullable|in:portal,internet',
             'email' => 'required|string',
             'password' => 'required|string',
+
+            // Only required when logging into internet
+            'ip' => 'required_if:login_type,internet|ip',
+            'mac' => 'nullable|string',
         ]);
 
         try {
 
+            // Default login type = portal
+            $loginType = $request->input('login_type') ?? 'portal';
+
+            /**
+             * INTERNET LOGIN (Hotspot only)
+             */
+            if ($loginType === 'internet') {
+
+                $device = Device::first();
+                $mikrotik = new MikrotikService($device);
+
+                $success = $mikrotik->loginUserToInternet(
+                    username: $request->email,
+                    password: $request->password,
+                    ip: $request->input('ip'),
+                    mac: $request->input('mac')
+                );
+
+                if (!$success) {
+                    return response()->json([
+                        'message' => 'Internet login failed.'
+                    ], 400);
+                }
+
+                return response()->json([
+                    'internet_success' => 'Internet login successful. You are now connected to the internet.'
+                ], 200);
+            }
+
+            /**
+             * PORTAL LOGIN (Admin/User dashboard)
+             */
             $user = User::where('email', $request->email)
                 ->orWhere('name', $request->email)
                 ->first();
@@ -98,9 +137,8 @@ class AuthController extends Controller
                 ], 401);
             }
 
+            Auth::login($user);
             $request->session()->regenerate();
-
-            Auth::login($user); // ✅ login the user (session attached automatically)
 
             $redirectUrl = match ($user->role) {
                 'admin' => '/admin/dashboard',
@@ -114,6 +152,7 @@ class AuthController extends Controller
             ], 200);
         } catch (\Exception $e) {
             Log::error('Login failed: ' . $e->getMessage());
+
             return response()->json([
                 'message' => 'Login failed, an unexpected error occurred',
             ], 500);
@@ -121,10 +160,12 @@ class AuthController extends Controller
     }
 
 
+
     public function logout(Request $request)
     {
         try {
-            Auth::logout();
+            Auth::guard('web')->logout();
+            // Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 

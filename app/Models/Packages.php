@@ -15,6 +15,7 @@ class Packages extends Model
         'isActive',
         'description',
         'devices',
-        'type'
+        'type',
+        'mikrotik_profile'
     ];
 }

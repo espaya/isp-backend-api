@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\PaymentReceiptMail;
+// use App\Mail\PaymentReceiptMail;
 use App\Models\Packages;
 use App\Models\Payment;
 use App\Models\PaymentAuthorization;
@@ -23,8 +23,6 @@ class PaystackController extends Controller
 {
     public function initialize(Request $request)
     {
-        // Log::info($request->all());
-
         // Preprocess card inputs
         $request->merge([
             'card_number' => str_replace(' ', '', $request->card_number ?? ''),
@@ -129,6 +127,10 @@ class PaystackController extends Controller
                     'reference' => $reference,
                     'channels' => ['card'],
                     'callback_url' => route('paystack.callback'),
+                    'metadata' => [
+                        'user_id' => Auth::id(),
+                        'package_id' => $package->id,
+                    ],
                 ];
 
                 $response = Http::withToken(config('services.paystack.secret_key'))
@@ -166,11 +168,10 @@ class PaystackController extends Controller
 
                 $data = $response->json();
 
-                Log::info($data);
-
                 if (!$response->ok() || !isset($data['data']['status'])) {
                     return response()->json(['message' => 'Paystack MoMo charge failed', 'errors' => $data], 500);
                 }
+
 
                 // For MoMo, status may be pay_offline; wait for webhook to confirm success
                 return response()->json([
@@ -181,7 +182,7 @@ class PaystackController extends Controller
             }
         } catch (Exception $ex) {
             Log::error($ex->getMessage() . 'on line' . $ex->getLine());
-            return response()->json(['message' => 'An unexpected error occurred'], 500);
+            return response()->json(['message' => $ex->getMessage()], 500);
         }
     }
 
@@ -236,6 +237,8 @@ class PaystackController extends Controller
                 'gateway_response' => $data['gateway_response'] ?? null,
             ]);
 
+            $password = Str::random(8);
+
             // 3️⃣ Create subscription
             $subscription = Subscription::create([
                 'user_id' => $user->id,
@@ -246,39 +249,50 @@ class PaystackController extends Controller
                     'daily' => now()->endOfDay(),
                     'weekly' => now()->addWeek(),
                     'monthly' => now()->addMonth(),
-                    default => null,
+                    default => throw new Exception('Invalid package type'),
                 },
                 'status' => 'active',
+                'hotspot_password' => $password
             ]);
 
-            $selector = new DeviceSelectorService();
 
+            $selector = new DeviceSelectorService();
             $device = $selector->selectBestDevice(
                 $request->latitude,
                 $request->longitude
             );
 
             if (!$device) {
-                throw new Exception('No available MikroTik device');
+                throw new Exception('No available Mikrotik device');
             }
+
+            // --- Validate device connection info ---
+            if (empty($device->ip) || empty($device->api_user) || empty($device->api_password)) {
+                throw new Exception("Selected device {$device->id} is missing IP or credentials");
+            }
+
 
             $mikrotik = new MikrotikService($device);
 
             $mikrotik->createOrUpdateHotspotUser(
                 username: $user->email,
-                password: Str::random(8),
+                password: $password,
                 profile: $package->mikrotik_profile,
                 expiresAt: $subscription->expires_at
             );
 
+            // Save hotspot password assigned to the user
+            // $subscription->hotspot_password = $password;
+            // $subscription->save();
+
             $device->increment('current_clients');
 
             // Send email to user
-            Mail::to($user->email)->queue(new PaymentReceiptMail($user, $payment, $package));
+            // Mail::to($user->email)->queue(new PaymentReceiptMail($user, $payment, $package));
 
-            $authorization = $data['data']['authorization'] ?? null;
+            $authorization = $data['authorization'] ?? null;
 
-            if ($authorization && $data['data']['channel'] === 'card') {
+            if ($authorization && $data['channel'] === 'card') {
                 PaymentAuthorization::updateOrCreate(
                     ['user_id' => $userId],
                     [
@@ -297,11 +311,12 @@ class PaystackController extends Controller
             return response()->json([
                 'message' => 'Payment verified and subscription activated',
                 'subscription' => $subscription,
-                'device' => $device->name
+                'device' => $device->name,
+                'hotspot_password' => $password
             ]);
         } catch (\Exception $ex) {
             DB::rollBack();
-            Log::error($ex->getMessage() . ' on line ' . $ex->getLine());
+            Log::error($ex->getMessage() . ' on line ' . $ex->getLine() . ' File: ' . $ex->getFile());
             return response()->json(['message' => 'An unexpected error occurred', 'error' => $ex->getMessage()], 500);
         }
     }
@@ -310,10 +325,18 @@ class PaystackController extends Controller
     public function callback(Request $request)
     {
         $reference = $request->query('reference');
+
         if (!$reference) {
-            return response()->json(['message' => 'Reference is missing'], 400);
+            abort(400, 'Reference missing');
         }
 
-        return $this->verify($reference, $request);
+        // Verify & create subscription
+        $this->verify($reference, $request);
+
+        // Redirect user to frontend success page
+        return redirect(
+            config('app.frontend_url') .
+                "/dashboard/payment/success/$reference?reference=$reference"
+        );
     }
 }

@@ -18,8 +18,8 @@ class RouterOSPool
         try {
             $client = new Client([
                 'host' => $config['host'],
-                'user' => $config['username'],
-                'pass' => $config['password'],
+                'user' => $config['api_user'],
+                'pass' => $config['api_password'],
                 'port' => $config['api_port'] ?? 8728,
                 'timeout' => 3,
             ]);

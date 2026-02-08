@@ -4,39 +4,48 @@ namespace App\Jobs;
 
 use App\Models\Subscription;
 use App\Services\MikrotikService;
+use Carbon\Carbon;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class ExpireSubscriptionsJob
+class ExpireSubscriptionsJob implements ShouldQueue
 {
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
     public function handle()
     {
-        $expiredSubscriptions = Subscription::where('status', 'active')
-            ->where('ends_at', '<=', now())
+        $expiredSubscriptions = Subscription::with('user', 'mikrotikDevice')
+            ->where('status', 'active')
+            ->where('expires_at', '<=', now())
             ->get();
-
-        if ($expiredSubscriptions->isEmpty()) {
-            return;
-        }
-
-        $mikrotik = new MikrotikService();
 
         foreach ($expiredSubscriptions as $subscription) {
             try {
                 $user = $subscription->user;
+                $device = $subscription->mikrotikDevice;
 
-                // Disable Mikrotik access
-                $mikrotik->disableHotspotUser($user->email);
+                // Disable on MikroTik ONLY if device exists
+                if ($device) {
+                    $mikrotik = new MikrotikService($device);
+                    $mikrotik->disableUser($user->email);
+                }
 
-                // Update DB
+                // ALWAYS expire in DB
                 $subscription->update([
                     'status' => 'expired',
                     'is_renewable' => false,
+                    'hotspot_password' => null,
                 ]);
-            } catch (\Exception $e) {
-                Log::error('Expire subscription failed', [
-                    'subscription_id' => $subscription->id,
-                    'error' => $e->getMessage(),
-                ]);
+
+                Log::info("Expired subscription {$subscription->id}");
+            } catch (\Throwable $e) {
+                Log::error(
+                    "Failed to expire subscription {$subscription->id}: {$e->getMessage()}"
+                );
             }
         }
     }

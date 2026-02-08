@@ -8,14 +8,15 @@ class Device extends Model
 {
     protected $fillable = [
         'name',
-        'description',
         'ip',
+        'description',
+        'api_user',
+        'api_password',
         'location',
         'monitorEnabled',
         'snmpCommunity',
         'model',
-        'api_user',
-        'api_password',
+
         'latitude',
         'longitude',
         'coverage_radius_km',

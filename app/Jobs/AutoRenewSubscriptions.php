@@ -12,7 +12,7 @@ class AutoRenewSubscriptions
 {
     public function handle()
     {
-        $subs = Subscription::with('user', 'package', 'device')
+        $subs = Subscription::with('user', 'package', 'mikrotikDevice')
             ->where('status', 'active')
             ->where('expires_at', '<=', now()->addMinutes(10))
             ->get();
@@ -51,7 +51,7 @@ class AutoRenewSubscriptions
                 ]);
 
                 // Re-enable MikroTik
-                $mikrotik = new MikrotikService($sub->device);
+                $mikrotik = new MikrotikService($sub->mikrotikDevice);
                 $mikrotik->createOrUpdateHotspotUser(
                     $user->email,
                     Str::random(8),

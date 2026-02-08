@@ -19,7 +19,8 @@ class Subscription extends Model
         'payment_id',
         'mac_address',
         'ip_address',
-        'mikrotik_device_id' //
+        'mikrotik_device_id', //
+        'hotspot_password'
     ];
 
 
@@ -59,5 +60,10 @@ class Subscription extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
+    }
+
+    public function scopeExpired($query)
+    {
+        return $query->where('expires_at', '<=', now());
     }
 }

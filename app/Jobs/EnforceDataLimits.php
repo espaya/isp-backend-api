@@ -9,17 +9,17 @@ class EnforceDataLimits
 {
     public function handle()
     {
-        $subs = Subscription::with('user', 'package', 'device')
+        $subs = Subscription::with('user', 'package', 'mikrotikDevice')
             ->where('status', 'active')
             ->get();
 
         foreach ($subs as $sub) {
-            if (!$sub->device || !$sub->package?->data_limit) {
+            if (!$sub->mikrotikDevice || !$sub->package?->data_limit) {
                 continue;
             }
 
             try {
-                $mikrotik = new MikrotikService($sub->device);
+                $mikrotik = new MikrotikService($sub->mikrotikDevice);
                 $usage = $mikrotik->getUserUsage($sub->user->email);
 
                 $limitBytes = $sub->package->data_limit * 1024 ** 3;

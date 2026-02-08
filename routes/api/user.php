@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\HotspotController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -27,4 +29,13 @@ Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
     Route::post('/subscriptions/{id}/cancel', [SubscriptionController::class, 'cancel']);
     Route::post('/subscriptions/{id}/renew', [SubscriptionController::class, 'renew']);
     Route::get('/subscriptions/data-usage', [SubscriptionController::class, 'dataUsage']);
+
+    Route::get('/subscriptions/by-reference/{reference}', [SubscriptionController::class, 'showByReference']);
+
+    // account
+    Route::get('/my-account', [UsersController::class, 'authUser']);
+});
+
+Route::middleware('web')->group(function () {
+    Route::get('/hotspot/status', [HotspotController::class, 'status']);
 });

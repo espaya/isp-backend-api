@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\PackagesController;
+use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -11,6 +12,9 @@ Route::middleware(['auth:sanctum', 'web', 'admin'])->group(function () {
         Gate::authorize('view-admin-dashboard');
         return response()->json(['message' => 'Admin dashboard']);
     });
+
+    // Users
+    Route::get('/get-users', [UsersController::class, 'index']);
 
     // Device
     Route::post('/add-device', [DeviceController::class, 'store']);

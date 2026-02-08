@@ -65,7 +65,7 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => 'Africa/Accra',
 
     /*
     |--------------------------------------------------------------------------
@@ -170,6 +170,8 @@ return [
         // ...
         'File' => Illuminate\Support\Facades\File::class,
     ],
+
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
 
 ];
