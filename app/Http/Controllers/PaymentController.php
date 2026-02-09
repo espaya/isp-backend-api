@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Payment;
+use Exception;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
@@ -14,9 +16,19 @@ class PaymentController extends Controller
     public function index()
     {
         $user = Auth::user();
-        $payments = Payment::where('user_id', $user->id)->latest()->get();
+        try {
 
-        return response()->json($payments);
+            $payments = Payment::where('user_id', $user->id)->orderBy('id', 'DESC')->paginate(20);
+
+            if ($payments->isEmpty()) {
+                return response()->json(['message' => 'No payments found'], 404);
+            }
+
+            return response()->json($payments, 200);
+        } catch (Exception $ex) {
+            Log::error($ex->getMessage());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
+        }
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HotspotController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\UsersController;
@@ -36,6 +37,9 @@ Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
     Route::get('/my-account', [UsersController::class, 'authUser']);
     Route::post('/update-profile', [UsersController::class, 'update']);
     Route::post('/update-password', [UsersController::class, 'updatePassword']);
+
+    // Payments
+    Route::get('/get-user-payments', [PaymentController::class, 'index']);
 });
 
 Route::middleware('web')->group(function () {
