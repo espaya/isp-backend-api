@@ -64,6 +64,6 @@ class Subscription extends Model
 
     public function scopeExpired($query)
     {
-        return $query->where('expires_at', '<=', now());
+        return $query->whereRaw("expires_at <= NOW()");
     }
 }

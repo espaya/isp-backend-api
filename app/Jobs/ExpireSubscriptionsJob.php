@@ -10,21 +10,26 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class ExpireSubscriptionsJob implements ShouldQueue
+class ExpireSubscriptionsJob
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function handle()
     {
-        $expiredSubscriptions = Subscription::with('user', 'mikrotikDevice')
-            ->where('status', 'active')
-            ->where('expires_at', '<=', now())
-            ->get();
+        try {
+            DB::beginTransaction();
 
-        foreach ($expiredSubscriptions as $subscription) {
-            try {
+            $expiredSubscriptions = Subscription::with('user', 'mikrotikDevice')
+                ->where('status', 'active')
+                ->whereRaw("expires_at <= NOW()")
+                ->get();
+
+
+            foreach ($expiredSubscriptions as $subscription) {
+
                 $user = $subscription->user;
                 $device = $subscription->mikrotikDevice;
 
@@ -38,15 +43,16 @@ class ExpireSubscriptionsJob implements ShouldQueue
                 $subscription->update([
                     'status' => 'expired',
                     'is_renewable' => false,
-                    'hotspot_password' => null,
+                    'hotspot_password' => '',
                 ]);
 
-                Log::info("Expired subscription {$subscription->id}");
-            } catch (\Throwable $e) {
-                Log::error(
-                    "Failed to expire subscription {$subscription->id}: {$e->getMessage()}"
-                );
+                DB::commit();
             }
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error(
+                "Failed to expire subscription {$subscription->id}: {$e->getMessage()}"
+            );
         }
     }
 }
