@@ -18,4 +18,9 @@ class Packages extends Model
         'type',
         'mikrotik_profile'
     ];
+
+    public function subscription()
+    {
+        return $this->hasMany(Subscription::class, 'package_id');
+    }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HotspotController;
+use App\Http\Controllers\PackagesController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\SubscriptionController;
@@ -32,6 +33,9 @@ Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
     Route::get('/subscriptions/data-usage', [SubscriptionController::class, 'dataUsage']);
 
     Route::get('/subscriptions/by-reference/{reference}', [SubscriptionController::class, 'showByReference']);
+
+    // current plan / subscription / package
+    Route::get('/user-current-package', [PackagesController::class, 'currentPackage']);
 
     // account
     Route::get('/my-account', [UsersController::class, 'authUser']);

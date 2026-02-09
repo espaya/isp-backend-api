@@ -86,6 +86,20 @@ class SubscriptionController extends Controller
 
         try {
             $user = Auth::user();
+
+            $existingSub = Subscription::where('user_id', $user->id)
+                ->where('status', 'active')
+                ->where('ends_at', '>', now())
+                ->first();
+
+            if ($existingSub) {
+                return response()->json([
+                    'message' => 'You already have an active subscription. Please wait until it expires before purchasing another plan.',
+                    'active_subscription' => $existingSub
+                ], 409); // Conflict
+            }
+
+
             $package = Packages::findOrFail($request->package_id);
 
             $startsAt = Carbon::now();

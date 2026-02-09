@@ -162,70 +162,69 @@ class MikrotikService
     }
 
     public function getHotspotActiveUserStatus(string $ip): ?array
-{
-    // 1. Get active session by IP
-    $query = (new Query('/ip/hotspot/active/print'))
-        ->where('address', $ip);
+    {
+        // 1. Get active session by IP
+        $query = (new Query('/ip/hotspot/active/print'))
+            ->where('address', $ip);
 
-    $active = $this->client->query($query)->read();
+        $active = $this->client->query($query)->read();
 
-    if (empty($active)) {
-        return null;
+        if (empty($active)) {
+            return null;
+        }
+
+        $activeUser = $active[0];
+        $username = $activeUser['user'] ?? null;
+
+        if (!$username) {
+            return null;
+        }
+
+        // 2. Get hotspot user info (to get profile)
+        $userQuery = (new Query('/ip/hotspot/user/print'))
+            ->where('name', $username);
+
+        $users = $this->client->query($userQuery)->read();
+
+        $profileName = $users[0]['profile'] ?? null;
+
+        // 3. Get user profile info (rate-limit, data limit, session timeout, etc.)
+        $profileData = null;
+
+        if ($profileName) {
+            $profileQuery = (new Query('/ip/hotspot/user/profile/print'))
+                ->where('name', $profileName);
+
+            $profiles = $this->client->query($profileQuery)->read();
+
+            $profileData = $profiles[0] ?? null;
+        }
+
+        return [
+            'user' => $activeUser['user'] ?? null,
+            'ip' => $activeUser['address'] ?? null,
+            'mac' => $activeUser['mac-address'] ?? null,
+            'uptime' => $activeUser['uptime'] ?? null,
+
+            'bytes_in' => (int) ($activeUser['bytes-in'] ?? 0),
+            'bytes_out' => (int) ($activeUser['bytes-out'] ?? 0),
+            'bytes_total' => (int) ($activeUser['bytes-in'] ?? 0) + (int) ($activeUser['bytes-out'] ?? 0),
+
+            'session_time_left' => $activeUser['session-time-left'] ?? null,
+            'idle_time' => $activeUser['idle-time'] ?? null,
+
+            // from hotspot user
+            'profile' => $profileName,
+
+            // from hotspot profile
+            'rate_limit' => $profileData['rate-limit'] ?? null,
+            'session_timeout' => $profileData['session-timeout'] ?? null,
+            'shared_users' => $profileData['shared-users'] ?? null,
+
+            // data limits (usually stored here if configured)
+            'limit_bytes_total' => $profileData['limit-bytes-total'] ?? null,
+            'limit_bytes_in' => $profileData['limit-bytes-in'] ?? null,
+            'limit_bytes_out' => $profileData['limit-bytes-out'] ?? null,
+        ];
     }
-
-    $activeUser = $active[0];
-    $username = $activeUser['user'] ?? null;
-
-    if (!$username) {
-        return null;
-    }
-
-    // 2. Get hotspot user info (to get profile)
-    $userQuery = (new Query('/ip/hotspot/user/print'))
-        ->where('name', $username);
-
-    $users = $this->client->query($userQuery)->read();
-
-    $profileName = $users[0]['profile'] ?? null;
-
-    // 3. Get user profile info (rate-limit, data limit, session timeout, etc.)
-    $profileData = null;
-
-    if ($profileName) {
-        $profileQuery = (new Query('/ip/hotspot/user/profile/print'))
-            ->where('name', $profileName);
-
-        $profiles = $this->client->query($profileQuery)->read();
-
-        $profileData = $profiles[0] ?? null;
-    }
-
-    return [
-        'user' => $activeUser['user'] ?? null,
-        'ip' => $activeUser['address'] ?? null,
-        'mac' => $activeUser['mac-address'] ?? null,
-        'uptime' => $activeUser['uptime'] ?? null,
-
-        'bytes_in' => (int) ($activeUser['bytes-in'] ?? 0),
-        'bytes_out' => (int) ($activeUser['bytes-out'] ?? 0),
-        'bytes_total' => (int) ($activeUser['bytes-in'] ?? 0) + (int) ($activeUser['bytes-out'] ?? 0),
-
-        'session_time_left' => $activeUser['session-time-left'] ?? null,
-        'idle_time' => $activeUser['idle-time'] ?? null,
-
-        // from hotspot user
-        'profile' => $profileName,
-
-        // from hotspot profile
-        'rate_limit' => $profileData['rate-limit'] ?? null,
-        'session_timeout' => $profileData['session-timeout'] ?? null,
-        'shared_users' => $profileData['shared-users'] ?? null,
-
-        // data limits (usually stored here if configured)
-        'limit_bytes_total' => $profileData['limit-bytes-total'] ?? null,
-        'limit_bytes_in' => $profileData['limit-bytes-in'] ?? null,
-        'limit_bytes_out' => $profileData['limit-bytes-out'] ?? null,
-    ];
-}
-
 }

@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Packages;
+use App\Models\Subscription;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -220,6 +222,25 @@ class PackagesController extends Controller
             $package->delete();
 
             return response()->json(['message' => 'Package deleted successfully'], 200);
+        } catch (Exception $ex) {
+            Log::error($ex->getMessage());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
+        }
+    }
+
+    public function currentPackage()
+    {
+        try {
+            $current = Subscription::with('package', 'payment')
+                ->where('status', 'active')
+                ->where('user_id', Auth::id())
+                ->first();
+
+            if (!$current) {
+                return response()->json(['message' => 'No active subscription found'], 404);
+            }
+
+            return response()->json($current, 200);
         } catch (Exception $ex) {
             Log::error($ex->getMessage());
             return response()->json(['message' => 'An unexpected error occurred'], 500);
