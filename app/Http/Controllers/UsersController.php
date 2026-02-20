@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * 
@@ -186,6 +189,50 @@ class UsersController extends Controller
             return response()->json([
                 'message' => 'An unexpected error occurred'
             ], 500);
+        }
+    }
+
+    public function uploadAvatar(Request $request)
+    {
+        $request->validate([
+            'avatar' => [
+                'required',
+                'image',
+                'mimes:jpg,jpeg,png,gif,webp',
+                'max:2048' // 2MB
+            ]
+        ], [
+            'avatar.required' => 'Please select an image to upload.',
+            'avatar.image' => 'The uploaded file must be an image.',
+            'avatar.mimes' => 'Only JPG, JPEG, PNG, GIF, and WEBP images are allowed.',
+            'avatar.max' => 'The image size must not exceed 2MB.'
+        ]);
+
+        try {
+            $profile = Profile::where('user_id', Auth::id())->first();
+
+            if (!$profile) {
+                return response()->json(['message' => 'User profile not found!'], 404);
+            }
+
+            // Delete old avatar
+            if ($profile->avatar && Storage::disk('public')->exists($profile->avatar)) {
+                Storage::disk('public')->delete($profile->avatar);
+            }
+
+            // Store new avatar
+            $path = $request->file('avatar')->store('avatars', 'public');
+
+            $profile->avatar = $path;
+            $profile->save();
+
+            return response()->json([
+                'message' => 'Avatar uploaded successfully',
+                'avatar' => asset('storage/' . $path)
+            ]);
+        } catch (\Exception $ex) {
+            Log::error($ex->getMessage());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
         }
     }
 }
