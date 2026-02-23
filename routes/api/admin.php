@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminPaymentsController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\PackagesController;
 use App\Http\Controllers\UsersController;
@@ -7,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-Route::middleware(['auth:sanctum', 'web', 'admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/admin/dashboard', function () {
         Gate::authorize('view-admin-dashboard');
         return response()->json(['message' => 'Admin dashboard']);
@@ -29,4 +30,8 @@ Route::middleware(['auth:sanctum', 'web', 'admin'])->group(function () {
     Route::put('/update-package/{id}', [PackagesController::class, 'update']);
     Route::patch('/packages/{id}/toggle', [PackagesController::class, 'toggleStatus']);
     Route::delete('/delete-package/{id}', [PackagesController::class, 'destroy']);
+
+    // Payments Listing
+    Route::get('/all-payments', [AdminPaymentsController::class, 'index']);
+
 });

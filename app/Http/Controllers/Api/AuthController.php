@@ -135,8 +135,9 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            Auth::login($user);
-            $request->session()->regenerate();
+            // Auth::login($user);
+            // $request->session()->regenerate();
+            $token = $user->createToken('auth-token')->plainTextToken;
 
             $redirectUrl = match ($user->role) {
                 'admin' => '/admin/dashboard',
@@ -146,7 +147,8 @@ class AuthController extends Controller
 
             return response()->json([
                 'user' => $user,
-                'redirect_url' => $redirectUrl
+                'redirect_url' => $redirectUrl,
+                'token' => $token,
             ], 200);
         } catch (\Exception $e) {
             Log::error('Login failed: ' . $e->getMessage());

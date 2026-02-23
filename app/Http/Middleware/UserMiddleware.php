@@ -15,8 +15,12 @@ class UserMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user() && $request->user()->role !== 'user') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+        $user = $request->user();
+
+        if (!$user || $user->role !== 'user') {
+            return response()->json([
+                'message' => 'Forbidden.'
+            ], 403);
         }
 
         return $next($request);

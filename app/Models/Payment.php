@@ -24,6 +24,11 @@ class Payment extends Model
         return $this->hasMany(Subscription::class);
     }
 
+    // public function package(): HasMany
+    // {
+    //     return $this->hasMany(Packages::class);
+    // }
+
     /**
      * Get the user who made the payment
      */
