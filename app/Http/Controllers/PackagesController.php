@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+
 
 class PackagesController extends Controller
 {
@@ -106,12 +108,26 @@ class PackagesController extends Controller
 
     public function update(Request $request, $id)
     {
+        Log::info($request->dataLimit);
+
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:packages,name,' . $id],
             'speed' => ['required', 'numeric', 'min:1'], // Mbps
             'price' => ['required', 'numeric', 'min:0'],
             'validity' => ['required', 'integer', 'min:1'], // days
-            'dataLimit' => ['nullable', 'numeric', 'min:0'], // null = unlimited
+            // 'dataLimit' => ['nullable', 'numeric', 'min:0'], // null = unlimited
+            'dataLimit' => [
+                'nullable',
+                function ($attribute, $value, $fail) {
+                    if ($value === 'Unlimited Data') {
+                        return;
+                    }
+
+                    if (!is_numeric($value) || $value < 0) {
+                        $fail('The data limit must be a positive number or "Unlimited Data".');
+                    }
+                },
+            ],
             'isActive' => ['nullable', 'boolean'],
             'description' => ['required', 'string'],
             'devices' => ['nullable', 'numeric', 'min:1'],
