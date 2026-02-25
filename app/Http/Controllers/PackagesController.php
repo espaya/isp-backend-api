@@ -108,8 +108,6 @@ class PackagesController extends Controller
 
     public function update(Request $request, $id)
     {
-        Log::info($request->dataLimit);
-
         $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:packages,name,' . $id],
             'speed' => ['required', 'numeric', 'min:1'], // Mbps

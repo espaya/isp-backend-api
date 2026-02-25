@@ -235,4 +235,6 @@ class UsersController extends Controller
             return response()->json(['message' => 'An unexpected error occurred'], 500);
         }
     }
+
+    
 }
