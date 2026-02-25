@@ -5,6 +5,7 @@ use App\Http\Controllers\PackagesController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaystackController;
 use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\UserDashboardController;
 use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
@@ -45,6 +46,8 @@ Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
 
     // Payments
     Route::get('/get-user-payments', [PaymentController::class, 'index']);
+
+    Route::get('/user/dashboard', [UserDashboardController::class, 'dashboard']);
 
 });
 
