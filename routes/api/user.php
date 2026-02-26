@@ -49,6 +49,8 @@ Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
 
     Route::get('/user/dashboard', [UserDashboardController::class, 'dashboard']);
 
+    Route::get('/user/connected-devices', [UserDashboardController::class, 'connectedDevices']);
+    Route::post('/user/disconnect-devices', [UserDashboardController::class, 'disconnectDevices']);
 });
 
 Route::middleware('web')->group(function () {

@@ -135,10 +135,9 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // Auth::login($user);
-            // $request->session()->regenerate();
+            $user->tokens()->delete();
             $token = $user->createToken('auth-token')->plainTextToken;
-
+            
             $redirectUrl = match ($user->role) {
                 'admin' => '/admin/dashboard',
                 'user' => '/dashboard',
@@ -162,18 +161,27 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         try {
-            Auth::guard('web')->logout();
-            // Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json([
+                    'message' => 'Unauthenticated'
+                ], 401);
+            }
+
+            // Delete current access token only
+            $request->user()->currentAccessToken()->delete();
+            // Delete from all device
+            $request->user()->tokens()->delete();
 
             return response()->json([
                 'message' => 'Successfully logged out'
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Logout failed: ' . $e->getMessage());
+
             return response()->json([
-                'message' => 'Logout failed, an unexpected error occurred',
+                'message' => 'Logout failed'
             ], 500);
         }
     }

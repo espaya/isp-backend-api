@@ -122,4 +122,53 @@ class UserDashboardController extends Controller
             ], 500);
         }
     }
+
+    public function connectedDevices()
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $device = Device::first();
+
+        if (!$device) {
+            return response()->json([]);
+        }
+
+        $mikrotik = new MikrotikService($device);
+
+        $sessions = $mikrotik->getUserActiveSessions($user->email);
+
+        $devices = collect($sessions)->map(function ($session) {
+            return [
+                'ip' => $session['address'] ?? null,
+                'mac' => $session['mac-address'] ?? null,
+                'uptime' => $session['uptime'] ?? null,
+                'bytes_in' => (int) ($session['bytes-in'] ?? 0),
+                'bytes_out' => (int) ($session['bytes-out'] ?? 0),
+            ];
+        });
+
+        return response()->json($devices);
+    }
+
+    public function disconnectDevices()
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $device = Device::first();
+
+        if ($device) {
+            $mikrotik = new MikrotikService($device);
+            $mikrotik->disconnectUserSessions($user->email);
+        }
+
+        return response()->json(['message' => 'All devices disconnected']);
+    }
 }

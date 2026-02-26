@@ -227,4 +227,27 @@ class MikrotikService
             'limit_bytes_out' => $profileData['limit-bytes-out'] ?? null,
         ];
     }
+
+    public function getUserActiveSessions(string $username): array
+    {
+        $query = (new \RouterOS\Query('/ip/hotspot/active/print'))
+            ->where('user', $username);
+
+        return $this->client->query($query)->read();
+    }
+
+    public function disconnectUserSessions(string $username): void
+    {
+        $query = (new \RouterOS\Query('/ip/hotspot/active/print'))
+            ->where('user', $username);
+
+        $sessions = $this->client->query($query)->read();
+
+        foreach ($sessions as $session) {
+            $remove = (new \RouterOS\Query('/ip/hotspot/active/remove'))
+                ->equal('.id', $session['.id']);
+
+            $this->client->query($remove)->read();
+        }
+    }
 }
