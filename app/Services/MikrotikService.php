@@ -25,7 +25,6 @@ class MikrotikService
     }
 
     /* ---------------- HOTSPOT ---------------- */
-
     public function userExists(string $username): bool
     {
         $q = (new Query('/ip/hotspot/user/print'))->where('name', $username);

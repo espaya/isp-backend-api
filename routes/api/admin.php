@@ -18,6 +18,9 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     // Users
     Route::get('/get-users', [UsersController::class, 'index']);
     Route::get('/latest-users', [AdminDashboardController::class, 'latestUsers']);
+    Route::get('/single-user/{id}', [UsersController::class, 'view']);
+    Route::put('/admin/users/{id}', [UsersController::class, 'updateByAdmin']);
+    Route::delete('/users/delete/{id}', [UsersController::class, 'destroy']);
 
     Route::get('/revenue-overview', [AdminDashboardController::class, 'revenueOverview']);
 

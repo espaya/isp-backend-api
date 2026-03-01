@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Payment;
+use App\Models\PaymentAuthorization;
 use App\Models\Profile;
+use App\Models\Subscription;
 use App\Models\User;
+use App\Models\UserUsage;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,6 +17,8 @@ use Illuminate\Validation\Rules\Password;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Session;
 
 /**
  * 
@@ -236,5 +242,227 @@ class UsersController extends Controller
         }
     }
 
-    
+    public function view($id)
+    {
+        try {
+            $user = User::with(['subscriptions.payment', 'profile'])->where('id', $id)->first();
+
+            if (!$user) {
+                return response()->json(['message' => 'User not found!'], 404);
+            }
+
+            return response()->json($user, 200);
+        } catch (Exception $ex) {
+            Log::error($ex->getMessage());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
+        }
+    }
+
+    public function updateByAdmin(Request $request, $id)
+    {
+
+        $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[a-zA-Z0-9](?:[a-zA-Z0-9._]{1,18}[a-zA-Z0-9])$/',
+                "unique:users,name,$id",
+            ],
+
+            'email' => [
+                'required',
+                'email:rfc,dns',
+                "unique:users,email,$id",
+            ],
+
+            'role' => [
+                'required',
+                'in:user,admin',
+            ],
+
+            'status' => [
+                'nullable',
+                'in:active,suspended',
+            ],
+
+            'phone' => [
+                'nullable',
+                function ($attribute, $value, $fail) {
+
+                    $clean = preg_replace('/\s+/', '', $value);
+
+                    if (!preg_match('/^\+?[0-9]{7,15}$/', $clean)) {
+                        $fail('Phone number must be valid internationally.');
+                    }
+                }
+            ],
+            'password' => [
+                'nullable',
+                'confirmed',
+                'string',
+                Password::min(8)
+                    ->mixedCase()
+                    ->letters()
+                    ->numbers()
+                    ->symbols()
+                    ->uncompromised()
+            ]
+
+        ], [
+            /* ================= NAME ================= */
+            'name.required' => 'Customer name is required.',
+            'name.max' => 'Name cannot exceed 255 characters.',
+            'name.regex' =>
+            'Name may contain letters, numbers, dots or underscores only.',
+            'name.unique' =>
+            'This username is already taken.',
+
+            /* ================= EMAIL ================= */
+            'email.required' => 'Email address is required.',
+            'email.email' => 'Enter a valid email address.',
+            'email.unique' => 'This email already exists.',
+
+            /* ================= ROLE ================= */
+            'role.required' => 'User role must be selected.',
+            'role.in' => 'Invalid user role selected.',
+
+            /* ================= STATUS ================= */
+            'status.in' => 'Invalid account status.',
+
+            /* ================= PHONE ================= */
+            'phone.regex' =>
+            'Phone must be a valid local or international number.',
+            'phone.max' =>
+            'Phone number is too long.',
+
+            /* ================= PASSWORD ================= */
+            'password.confirmed' => 'Passwords do not match',
+            'password.string' => 'Invalid password format',
+
+        ]);
+
+        try {
+
+            DB::beginTransaction();
+
+            $user = User::findOrFail($id);
+
+            /*
+            |--------------------------------------------------------------------------
+            | USER UPDATE
+            |--------------------------------------------------------------------------
+            */
+            $user->fill([
+                'name'   => $request->name,
+                'email'  => $request->email,
+                'role'   => $request->role,
+                'status' => $request->status,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | PASSWORD UPDATE (ONLY IF PROVIDED)
+            |--------------------------------------------------------------------------
+            */
+            if ($request->filled('password')) {
+
+                // Optional: prevent same password update
+                if (!Hash::check($request->password, $user->password)) {
+                    $user->password = Hash::make($request->password);
+                }
+            }
+
+            $userChanged = $user->isDirty();
+
+            if ($userChanged) {
+                $user->save();
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | PROFILE UPDATE
+            |--------------------------------------------------------------------------
+            */
+            $profile = $user->profile()->firstOrNew([
+                'user_id' => $user->id
+            ]);
+
+            $profile->fill([
+                'phone'   => $request->phone,
+                'address' => $request->address,
+            ]);
+
+            $profileChanged = $profile->isDirty();
+
+            if ($profileChanged) {
+                $profile->save();
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | CHECK IF NOTHING CHANGED
+            |--------------------------------------------------------------------------
+            */
+            if (!$userChanged && !$profileChanged) {
+
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'No changes were made.'
+                ], 200);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'User updated successfully',
+                'changes' => [
+                    'user' => $user->getChanges(),
+                    'profile' => $profile->getChanges(),
+                ]
+            ]);
+        } catch (Exception $ex) {
+
+            DB::rollBack();
+
+            Log::error('Admin user update failed: ' . $ex->getMessage());
+
+            return response()->json([
+                'message' => 'An unexpected error occurred'
+            ], 500);
+        }
+    }
+
+    public function destroy($id)
+    {
+        DB::beginTransaction();
+
+        try {
+            $user = User::find($id);
+
+            if (!$user) {
+                return response()->json([
+                    'message' => 'User not found!'
+                ], 404);
+            }
+
+            $user->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'User deleted successfully'
+            ], 200);
+        } catch (\Exception $ex) {
+
+            DB::rollBack();
+
+            Log::error($ex->getMessage());
+
+            return response()->json([
+                'message' => 'An unexpected error occurred'
+            ], 500);
+        }
+    }
 }
