@@ -14,6 +14,8 @@ return [
         'http://localhost:5173',
          'http://localhost:5174',
          'http://192.168.10.10:5173', // temporary IP address for local testing
+         'http://novanetgh.net',
+         'http://admin.novanetgh.net'
     ],
 
     'allowed_headers' => ['*'],

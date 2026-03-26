@@ -327,4 +327,22 @@ class SubscriptionController extends Controller
             return response()->json(['message' => 'An unexpected error occurred'], 500);
         }
     }
+
+    public function hotspotInfo()
+    {
+        try {
+            $subscription = Subscription::with('payment')->where('status', 'active')->first();
+
+            if (!$subscription) {
+                return response()->json(['message' => 'No active hotspot info available'], 404);
+            }
+
+            $reference = $subscription["payment"]["reference"];
+
+            return response()->json($reference, 200);
+        } catch (Exception $ex) {
+            Log::error($ex->getMessage());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
+        }
+    }
 }

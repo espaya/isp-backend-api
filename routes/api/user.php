@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
+Route::middleware(['auth:sanctum', 'user'])->group(function () {
     Route::get('/dashboard', function () {
         Gate::authorize('view-user-dashboard');
         return response()->json(['message' => 'User dashboard']);
@@ -32,6 +32,8 @@ Route::middleware(['auth:sanctum', 'web', 'user'])->group(function () {
     Route::post('/subscriptions/{id}/cancel', [SubscriptionController::class, 'cancel']);
     Route::post('/subscriptions/{id}/renew', [SubscriptionController::class, 'renew']);
     Route::get('/subscriptions/data-usage', [SubscriptionController::class, 'dataUsage']);
+
+    Route::get('/hotspot-info', [SubscriptionController::class, 'hotspotInfo']);
 
     Route::get('/subscriptions/by-reference/{reference}', [SubscriptionController::class, 'showByReference']);
 
