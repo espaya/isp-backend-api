@@ -34,6 +34,8 @@ class DeviceController extends Controller
             'monitorEnabled' => ['nullable', 'boolean'],
             'snmpCommunity' => ['required', 'string'],
             'model' => ['required', 'string', 'max:255'],
+            'api_password' => ['required', 'string'],
+            'api_user' => ['required', 'string']
         ], [
             'name.required' => 'Device name is required.',
             'name.unique' => 'A device with this name already exists.',
@@ -53,9 +55,11 @@ class DeviceController extends Controller
 
             'model.required' => 'Device model is required.',
             'model.max' => 'Device model must not exceed 255 characters.',
+            'api_password.required' => 'This field is required',
+            'api_password.string' => 'Invalid inputs',
+            'api_user.required' => 'This field is required',
+            'api_user.string' => 'Invalid inputs'
         ]);
-
-
 
         DB::beginTransaction();
 
@@ -67,7 +71,9 @@ class DeviceController extends Controller
                 'location' => $request->location,
                 'monitorEnabled' => $request->monitorEnabled,
                 'snmpCommunity' => $request->snmpCommunity,
-                'model' => $request->model
+                'model' => $request->model,
+                'api_user' => $request->api_url,
+                'api_password' => $request->api_password,
             ]);
 
             DB::commit();
