@@ -72,7 +72,7 @@ class DeviceController extends Controller
                 'monitorEnabled' => $request->monitorEnabled,
                 'snmpCommunity' => $request->snmpCommunity,
                 'model' => $request->model,
-                'api_user' => $request->api_url,
+                'api_user' => $request->api_user,
                 'api_password' => $request->api_password,
             ]);
 
