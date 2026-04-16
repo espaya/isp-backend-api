@@ -22,6 +22,7 @@ Route::middleware(['auth:sanctum', 'user'])->group(function () {
 
     Route::post('/paystack/initialize', [PaystackController::class, 'initialize']);
     Route::get('/paystack/verify/{reference}', [PaystackController::class, 'verify']);
+    Route::get('/paystack/callback', [PaystackController::class, 'callback'])->name('paystack.callback');
 
 
     // Subscription Management
