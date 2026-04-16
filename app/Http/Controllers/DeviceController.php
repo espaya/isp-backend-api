@@ -7,6 +7,8 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+
 
 class DeviceController extends Controller
 {
@@ -61,6 +63,13 @@ class DeviceController extends Controller
             'api_user.string' => 'Invalid inputs'
         ]);
 
+        // 🔥 Ping check BEFORE saving
+        if (!$this->isOnline($request->ip)) {
+            return response()->json([
+                'message' => 'Device is offline, cannot add'
+            ], 422);
+        }
+
         DB::beginTransaction();
 
         try {
@@ -86,7 +95,84 @@ class DeviceController extends Controller
         }
     }
 
-    public function update(Request $request, $id) {}
+
+    public function update(Request $request, $id)
+    {
+        $device = Device::findOrFail($id);
+
+        $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('devices', 'name')->ignore($device->id),
+            ],
+            'description' => ['nullable', 'string'],
+            'ip' => [
+                'required',
+                'ip',
+                Rule::unique('devices', 'ip')->ignore($device->id),
+            ],
+            'location' => ['required', 'string', 'max:255'],
+            'monitorEnabled' => ['nullable', 'boolean'],
+            'snmpCommunity' => ['required', 'string'],
+            'model' => ['required', 'string', 'max:255'],
+            'api_user' => ['required', 'string'],
+            'api_password' => ['nullable', 'string'],
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            // Fill model instead of manual array
+            $device->fill([
+                'name' => $request->name,
+                'description' => $request->description ?? "",
+                'ip' => $request->ip,
+                'location' => $request->location,
+                'monitorEnabled' => $request->monitorEnabled ?? false,
+                'snmpCommunity' => $request->snmpCommunity,
+                'model' => $request->model,
+                'api_user' => $request->api_user,
+            ]);
+
+            // Only update password if provided
+            if ($request->filled('api_password')) {
+                $device->api_password = $request->api_password;
+            }
+
+            // 🔥 Check if anything actually changed
+            if (!$device->isDirty()) {
+                return response()->json([
+                    'message' => 'No changes detected'
+                ], 200);
+            }
+
+            // Optional: get changed fields before saving
+            $changedFields = $device->getDirty();
+
+            $device->save();
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Device updated successfully',
+                'updated_fields' => array_keys($changedFields),
+                'device' => $device
+            ], 200);
+        } catch (\Exception $ex) {
+            DB::rollBack();
+
+            Log::error('Device update failed', [
+                'error' => $ex->getMessage(),
+                'device_id' => $id
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to update device'
+            ], 500);
+        }
+    }
 
     public function destroy($id) {}
 
@@ -177,15 +263,20 @@ class DeviceController extends Controller
 
     private function isOnline($ip)
     {
-        if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
-            $status = null;
-            exec("ping -n 1 -w 1000 $ip", $output, $status);
-            return $status === 0;
-        } else {
-            $status = null;
-            exec("ping -c 1 -W 1 $ip", $output, $status);
-            return $status === 0;
+        // Validate IP again just to be safe
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return false;
         }
+
+        $ip = escapeshellarg($ip); // 🔥 prevent command injection
+
+        if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
+            exec("ping -n 1 -w 1000 $ip", $output, $status);
+        } else {
+            exec("ping -c 1 -W 1 $ip", $output, $status);
+        }
+
+        return $status === 0;
     }
 
     public function cardStats()
