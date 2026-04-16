@@ -11,6 +11,10 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
+
+Route::get('/paystack/callback', [PaystackController::class, 'callback'])->name('paystack.callback');
+
+
 Route::middleware(['auth:sanctum', 'user'])->group(function () {
     Route::get('/dashboard', function () {
         Gate::authorize('view-user-dashboard');
@@ -22,7 +26,6 @@ Route::middleware(['auth:sanctum', 'user'])->group(function () {
 
     Route::post('/paystack/initialize', [PaystackController::class, 'initialize']);
     Route::get('/paystack/verify/{reference}', [PaystackController::class, 'verify']);
-    Route::get('/paystack/callback', [PaystackController::class, 'callback'])->name('paystack.callback');
 
 
     // Subscription Management
