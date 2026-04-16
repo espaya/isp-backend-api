@@ -283,8 +283,8 @@ class PaystackController extends Controller
             );
 
             // Save hotspot password assigned to the user
-            $subscription->hotspot_password = $password;
-            $subscription->save();
+            // $subscription->hotspot_password = $password;
+            // $subscription->save();
 
             $device->increment('current_clients');
 
