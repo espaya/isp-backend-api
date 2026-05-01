@@ -17,7 +17,6 @@ class UserDashboardController extends Controller
     public function dashboard(Request $request)
     {
         try {
-
             $user = Auth::user();
 
             if (!$user) {
@@ -34,91 +33,109 @@ class UserDashboardController extends Controller
 
             $package = $payment?->package;
 
-            // Time left calculation
+            // Time left calculation (FIXED: check if payment and package exist)
             $timeLeftHours = 0;
 
-            if ($payment && $package) {
+            if ($payment && $package && $payment->created_at) {
                 $expiry = $payment->created_at->addDays($package->validity);
                 $timeLeftHours = max(now()->diffInHours($expiry, false), 0);
             }
 
-            // MikroTik Active Status
+            // MikroTik Active Status (FIXED: handle gracefully if MikrotikService fails)
             $isConnected = false;
             $activeSession = null;
 
             $device = Device::first();
 
             if ($device && $request->ip()) {
-
-                $mikrotik = new MikrotikService($device);
-
-                $activeSession = $mikrotik->getHotspotActiveUserStatus(
-                    $request->ip()
-                );
-
-                if ($activeSession) {
-                    $isConnected = true;
+                try {
+                    $mikrotik = new MikrotikService($device);
+                    $activeSession = $mikrotik->getHotspotActiveUserStatus($request->ip());
+                    $isConnected = !is_null($activeSession);
+                } catch (\Exception $e) {
+                    Log::warning('Mikrotik connection failed: ' . $e->getMessage());
+                    // Don't fail the whole request, just set isConnected to false
+                    $isConnected = false;
+                    $activeSession = null;
                 }
             }
 
-            // Usage Data Example (replace with real tracking table)
-            // $dailyUsage = [50, 120, 200, 180, 220, 160, 100];
-            $dailyUsage = UserUsage::where('user_id', $user->id)
-                ->whereBetween('usage_date', [
-                    now()->subDays(6)->toDateString(),
-                    now()->toDateString()
-                ])
-                ->orderBy('usage_date')
-                ->pluck('bytes_used')
-                ->map(fn($bytes) => round($bytes / 1024 / 1024, 2)) // convert to MB
-                ->values();
+            // Usage Data - Daily (FIXED: handle empty results)
+            $dailyUsage = collect();
+            try {
+                $dailyUsage = UserUsage::where('user_id', $user->id)
+                    ->whereBetween('usage_date', [
+                        now()->subDays(6)->toDateString(),
+                        now()->toDateString()
+                    ])
+                    ->orderBy('usage_date')
+                    ->pluck('bytes_used')
+                    ->map(fn($bytes) => round($bytes / 1024 / 1024, 2))
+                    ->values();
+            } catch (\Exception $e) {
+                Log::warning('Failed to fetch daily usage: ' . $e->getMessage());
+                $dailyUsage = collect();
+            }
 
-            // $weeklyUsage = [5, 6, 4, 7, 8, 6, 5];
-            $weeklyUsage = UserUsage::where('user_id', $user->id)
-                ->whereBetween('usage_date', [
-                    now()->subWeeks(6)->startOfWeek(),
-                    now()->endOfWeek()
-                ])
-                ->get()
-                ->groupBy(function ($item) {
-                    return Carbon::parse($item->usage_date)->weekOfYear;
-                })
-                ->map(function ($week) {
-                    return round($week->sum('bytes_used') / 1024 / 1024 / 1024, 2); // GB
-                })
-                ->values();
+            // Usage Data - Weekly (FIXED: handle empty results)
+            $weeklyUsage = collect();
+            try {
+                $weeklyUsage = UserUsage::where('user_id', $user->id)
+                    ->whereBetween('usage_date', [
+                        now()->subWeeks(6)->startOfWeek()->toDateString(),
+                        now()->endOfWeek()->toDateString()
+                    ])
+                    ->get()
+                    ->groupBy(function ($item) {
+                        return Carbon::parse($item->usage_date)->weekOfYear;
+                    })
+                    ->map(function ($week) {
+                        return round($week->sum('bytes_used') / 1024 / 1024 / 1024, 2);
+                    })
+                    ->values();
+            } catch (\Exception $e) {
+                Log::warning('Failed to fetch weekly usage: ' . $e->getMessage());
+                $weeklyUsage = collect();
+            }
 
-            // $monthlyUsage = [10, 15, 12, 18, 20, 25, 30, 28, 22, 18, 15, 20];
-            $monthlyUsage = UserUsage::where('user_id', $user->id)
-                ->whereYear('usage_date', now()->year)
-                ->get()
-                ->groupBy(function ($item) {
-                    return Carbon::parse($item->usage_date)->month;
-                })
-                ->map(function ($month) {
-                    return round($month->sum('bytes_used') / 1024 / 1024 / 1024, 2); // GB
-                })
-                ->values();
+            // Usage Data - Monthly (FIXED: handle empty results)
+            $monthlyUsage = collect();
+            try {
+                $monthlyUsage = UserUsage::where('user_id', $user->id)
+                    ->whereYear('usage_date', now()->year)
+                    ->get()
+                    ->groupBy(function ($item) {
+                        return Carbon::parse($item->usage_date)->month;
+                    })
+                    ->map(function ($month) {
+                        return round($month->sum('bytes_used') / 1024 / 1024 / 1024, 2);
+                    })
+                    ->values();
+            } catch (\Exception $e) {
+                Log::warning('Failed to fetch monthly usage: ' . $e->getMessage());
+                $monthlyUsage = collect();
+            }
 
             return response()->json([
                 'status' => $isConnected ? 'Connected' : 'Disconnected',
                 'timeLeft' => $timeLeftHours,
                 'speed' => $package?->speed ?? 0,
                 'package' => $package?->name ?? 'No Active Package',
-                'price' => ($package?->price) / 1000 ?? 0.00,
-
+                'price' => isset($package->price) ? $package->price / 1000 : 0.00,
                 'usage' => [
-                    'daily' => $dailyUsage->pad(7, 0),
-                    'weekly' => $weeklyUsage->pad(7, 0),
-                    'monthly' => $monthlyUsage->pad(12, 0),
+                    'daily' => $dailyUsage->pad(7, 0)->values(),
+                    'weekly' => $weeklyUsage->pad(7, 0)->values(),
+                    'monthly' => $monthlyUsage->pad(12, 0)->values(),
                 ],
-
-                'session' => $activeSession // 🔥 optional: send real session info
+                'session' => $activeSession
             ]);
         } catch (\Throwable $e) {
-            Log::error($e->getMessage());
+            Log::error('Dashboard error: ' . $e->getMessage());
+            Log::error('Dashboard trace: ' . $e->getTraceAsString());
+
             return response()->json([
-                'message' => 'Failed to load dashboard'
+                'message' => 'Failed to load dashboard',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
