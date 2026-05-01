@@ -186,7 +186,7 @@ class PaystackController extends Controller
         }
     }
 
-    public function verify($reference, Request $request)
+    public function verify(Request $request, string $reference,)
     {
         DB::beginTransaction();
 
@@ -324,19 +324,46 @@ class PaystackController extends Controller
 
     public function callback(Request $request)
     {
+        // Get reference from query params
         $reference = $request->query('reference');
+
+        // If reference is empty, try trxref (Paystack sometimes uses this)
+        if (!$reference) {
+            $reference = $request->query('trxref');
+        }
 
         if (!$reference) {
             abort(400, 'Reference missing');
         }
 
-        // Verify & create subscription
-        $this->verify($reference, $request);
+        // Ensure reference is a string (not an object or array)
+        if (is_object($reference)) {
+            $reference = $reference->reference ?? $reference->id ?? (string) $reference;
+        }
 
-        // Redirect user to frontend success page
+        if (is_array($reference)) {
+            $reference = $reference['reference'] ?? $reference['id'] ?? (string) $reference;
+        }
+
+        // Cast to string to prevent [object Object]
+        $referenceString = (string) $reference;
+
+        // Validate it's not an empty string or [object Object]
+        if (empty($referenceString) || $referenceString === '[object Object]') {
+            Log::error('Invalid reference after conversion', [
+                'original' => $reference,
+                'converted' => $referenceString
+            ]);
+            abort(400, 'Invalid reference format');
+        }
+
+        // Verify & create subscription
+        $this->verify($request, $referenceString);
+
+        // Redirect user to frontend success page with proper string
         return redirect(
             config('app.frontend_url') .
-                "/dashboard/payment/success/$reference?reference=$reference"
+                "/dashboard/payment/success/{$referenceString}?reference={$referenceString}"
         );
     }
 }
