@@ -126,7 +126,7 @@ class PaystackController extends Controller
                     'amount' => $package->price * 100,
                     'reference' => $reference,
                     'channels' => ['card'],
-                    'callback_url' => route('paystack.callback'),
+                    'callback_url' => config('app.frontend_url') . '/dashboard/payment/success',
                     'metadata' => [
                         'user_id' => Auth::id(),
                         'package_id' => $package->id,
