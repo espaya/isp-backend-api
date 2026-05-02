@@ -354,16 +354,25 @@ class PaystackController extends Controller
                 'original' => $reference,
                 'converted' => $referenceString
             ]);
-            abort(400, 'Invalid reference format');
+            return redirect(config('app.frontend_url') . '/dashboard/payments?error=invalid_reference');
         }
 
-        // Verify & create subscription
-        $this->verify($request, $referenceString);
+        // ✅ Verify & create subscription and check if successful
+        $verificationResponse = $this->verify($request, $referenceString);
+        $verificationData = $verificationResponse->getData();
 
-        // Redirect user to frontend success page with proper string
+        // ✅ If verification failed, redirect to payments page with error
+        if ($verificationResponse->getStatusCode() !== 200) {
+            Log::error('Verification failed for reference: ' . $referenceString, [
+                'response' => $verificationData
+            ]);
+            return redirect(config('app.frontend_url') . '/dashboard/payments?error=verification_failed');
+        }
+
+        // ✅ Redirect to success page with reference in both path and query params
         return redirect(
             config('app.frontend_url') .
-                "/dashboard/payment/success/{$referenceString}"
+                "/dashboard/payment/success/{$referenceString}?reference={$referenceString}&trxref={$referenceString}"
         );
     }
 }
