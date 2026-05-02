@@ -331,17 +331,43 @@ class SubscriptionController extends Controller
     public function hotspotInfo()
     {
         try {
-            $subscription = Subscription::with('payment')->where('status', 'active')->first();
+            $user = auth()->user();
 
-            if (!$subscription) {
-                return response()->json(['message' => 'No active hotspot info available'], 404);
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized'], 401);
             }
 
-            $reference = $subscription["payment"]["reference"];
+            // Get user's active subscription with payment relation
+            $subscription = Subscription::with('payment')
+                ->where('user_id', $user->id)
+                ->where('status', 'active')
+                ->first();
 
-            return response()->json($reference, 200);
+            if (!$subscription) {
+                return response()->json([
+                    'has_active_subscription' => false,
+                    'message' => 'No active subscription found'
+                ], 404);
+            }
+
+            // Extract reference safely
+            $reference = null;
+            if ($subscription->payment && isset($subscription->payment->reference)) {
+                $reference = $subscription->payment->reference;
+            } elseif ($subscription->reference) {
+                $reference = $subscription->reference;
+            }
+
+            return response()->json([
+                'has_active_subscription' => true,
+                'reference' => $reference,
+                'subscription_id' => $subscription->id,
+                'status' => $subscription->status,
+                'expires_at' => $subscription->expires_at,
+                'hotspot_password' => $subscription->hotspot_password
+            ], 200);
         } catch (Exception $ex) {
-            Log::error($ex->getMessage());
+            Log::error('hotspotInfo error: ' . $ex->getMessage());
             return response()->json(['message' => 'An unexpected error occurred'], 500);
         }
     }
