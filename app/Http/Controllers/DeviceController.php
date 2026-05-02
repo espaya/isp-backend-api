@@ -105,7 +105,6 @@ class DeviceController extends Controller
             }
 
             return response()->json($device, 200);
-
         } catch (Exception $ex) {
             Log::error("Error getting single device: " . $ex->getMessage());
             return response()->json(['message' => "An unexpected error occurred"], 500);
@@ -137,6 +136,13 @@ class DeviceController extends Controller
             'api_user' => ['required', 'string'],
             'api_password' => ['nullable', 'string'],
         ]);
+
+        // 🔥 Ping check BEFORE updating
+        if (!$this->isOnline($request->ip)) {
+            return response()->json([
+                'message' => 'Device is offline, cannot add'
+            ], 422);
+        }
 
         DB::beginTransaction();
 
