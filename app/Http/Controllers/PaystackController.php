@@ -126,7 +126,7 @@ class PaystackController extends Controller
                     'amount' => $package->price * 100,
                     'reference' => $reference,
                     'channels' => ['card'],
-                    'callback_url' => config('app.frontend_url') . '/api/paystack/callback' ,//config('app.frontend_url') . '/dashboard/payment/success',
+                    'callback_url' => config('app.frontend_url') . '/api/paystack/callback', //config('app.frontend_url') . '/dashboard/payment/success',
                     'metadata' => [
                         'user_id' => Auth::id(),
                         'package_id' => $package->id,
@@ -186,22 +186,30 @@ class PaystackController extends Controller
         }
     }
 
-    public function verify(Request $request, string $reference,)
+    public function verify(Request $request, string $reference)
     {
         DB::beginTransaction();
 
         try {
+            Log::info('Starting verification for reference: ' . $reference);
+
             // 1️⃣ Verify payment from Paystack
             $response = Http::withToken(config('services.paystack.secret_key'))
                 ->get(config('services.paystack.base_url') . "/transaction/verify/{$reference}");
 
+            Log::info('Paystack verification response status: ' . $response->status());
+
             if (!$response->ok()) {
+                DB::rollBack();
+                Log::error('Paystack verification HTTP failed for reference: ' . $reference);
                 return response()->json(['message' => 'Paystack verification failed'], 400);
             }
 
             $data = $response->json()['data'] ?? null;
 
             if (!$data || ($data['status'] ?? 'failed') !== 'success') {
+                DB::rollBack();
+                Log::error('Payment not successful for reference: ' . $reference, ['data' => $data]);
                 return response()->json([
                     'message' => $data['gateway_response'] ?? 'Payment not successful',
                     'status' => $data['status'] ?? 'failed'
@@ -214,7 +222,17 @@ class PaystackController extends Controller
             $packageId = $metadata['package_id'] ?? null;
 
             if (!$userId || !$packageId) {
-                throw new Exception('Missing metadata from Paystack');
+                DB::rollBack();
+                Log::error('Missing metadata from Paystack for reference: ' . $reference);
+                return response()->json(['message' => 'Missing metadata from Paystack'], 400);
+            }
+
+            // Check if payment already processed
+            $existingPayment = Payment::where('reference', $reference)->first();
+            if ($existingPayment && $existingPayment->status === 'success') {
+                DB::commit();
+                Log::info('Payment already verified for reference: ' . $reference);
+                return response()->json(['message' => 'Payment already verified'], 200);
             }
 
             $payment = Payment::firstOrCreate(
@@ -257,43 +275,34 @@ class PaystackController extends Controller
                 'hotspot_password' => $password,
             ]);
 
-            $selector = new DeviceSelectorService();
-            $device = $selector->selectBestDevice(
-                $request->latitude,
-                $request->longitude
-            );
+            // Try to create Mikrotik user, but don't fail if it doesn't work
+            try {
+                $selector = new DeviceSelectorService();
+                $device = $selector->selectBestDevice(
+                    $request->latitude ?? 0,
+                    $request->longitude ?? 0
+                );
 
-            if (!$device) {
-                throw new Exception('No available Mikrotik device');
+                if ($device && !empty($device->ip) && !empty($device->api_user) && !empty($device->api_password)) {
+                    $mikrotik = new MikrotikService($device);
+                    $mikrotik->createOrUpdateHotspotUser(
+                        username: $user->email,
+                        password: $password,
+                        profile: $package->mikrotik_profile,
+                        expiresAt: $subscription->expires_at
+                    );
+                    $device->increment('current_clients');
+                }
+            } catch (\Exception $e) {
+                Log::warning('Mikrotik user creation failed but subscription is active: ' . $e->getMessage());
+                // Don't rollback - subscription is still valid
             }
 
-            // --- Validate device connection info ---
-            if (empty($device->ip) || empty($device->api_user) || empty($device->api_password)) {
-                throw new Exception("Selected device {$device->id} is missing IP or credentials");
-            }
-
-
-            $mikrotik = new MikrotikService($device);
-
-            $mikrotik->createOrUpdateHotspotUser(
-                username: $user->email,
-                password: $password,
-                profile: $package->mikrotik_profile,
-                expiresAt: $subscription->expires_at
-            );
-
-            // Save hotspot password assigned to the user
             $subscription->hotspot_password = $password;
             $subscription->save();
 
-            $device->increment('current_clients');
-
-            // Send email to user
-            // Mail::to($user->email)->queue(new PaymentReceiptMail($user, $payment, $package));
-
             $authorization = $data['authorization'] ?? null;
-
-            if ($authorization && $data['channel'] === 'card') {
+            if ($authorization && ($data['channel'] ?? null) === 'card') {
                 PaymentAuthorization::updateOrCreate(
                     ['user_id' => $userId],
                     [
@@ -308,17 +317,17 @@ class PaystackController extends Controller
             }
 
             DB::commit();
+            Log::info('Payment verified and subscription activated for reference: ' . $reference);
 
             return response()->json([
                 'message' => 'Payment verified and subscription activated',
                 'subscription' => $subscription,
-                'device' => $device->name,
                 'hotspot_password' => $password
-            ]);
+            ], 200);
         } catch (\Exception $ex) {
             DB::rollBack();
-            Log::error($ex->getMessage() . ' on line ' . $ex->getLine() . ' File: ' . $ex->getFile());
-            return response()->json(['message' => 'An unexpected error occurred', 'error' => $ex->getMessage()], 500);
+            Log::error('Verification error: ' . $ex->getMessage() . ' on line ' . $ex->getLine() . ' File: ' . $ex->getFile());
+            return response()->json(['message' => 'An unexpected error occurred: ' . $ex->getMessage()], 500);
         }
     }
 
@@ -357,19 +366,20 @@ class PaystackController extends Controller
             return redirect(config('app.frontend_url') . '/dashboard/payments?error=invalid_reference');
         }
 
-        // ✅ Verify & create subscription and check if successful
-        $verificationResponse = $this->verify($request, $referenceString);
-        $verificationData = $verificationResponse->getData();
+        // ✅ Call verify and get the response
+        $response = $this->verify($request, $referenceString);
 
-        // ✅ If verification failed, redirect to payments page with error
-        if ($verificationResponse->getStatusCode() !== 200) {
+        // ✅ Check if verification was successful (status code 200)
+        if ($response->getStatusCode() !== 200) {
+            $responseData = $response->getData();
             Log::error('Verification failed for reference: ' . $referenceString, [
-                'response' => $verificationData
+                'status_code' => $response->getStatusCode(),
+                'response' => $responseData
             ]);
             return redirect(config('app.frontend_url') . '/dashboard/payments?error=verification_failed');
         }
 
-        // ✅ Redirect to success page with reference in both path and query params
+        // ✅ Redirect to success page
         return redirect(
             config('app.frontend_url') .
                 "/dashboard/payment/success/{$referenceString}?reference={$referenceString}&trxref={$referenceString}"
