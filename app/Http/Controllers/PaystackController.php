@@ -363,7 +363,7 @@ class PaystackController extends Controller
         // Redirect user to frontend success page with proper string
         return redirect(
             config('app.frontend_url') .
-                "/dashboard/payment/success/{$referenceString}?reference={$referenceString}"
+                "/dashboard/payment/success/{$referenceString}"
         );
     }
 }
