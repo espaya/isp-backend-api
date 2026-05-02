@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Device;
+use App\Services\MikrotikService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -63,8 +64,11 @@ class DeviceController extends Controller
             'api_user.string' => 'Invalid inputs'
         ]);
 
+        $device = Device::where('ip', $request->ip)->first();
+
+
         // 🔥 Ping check BEFORE saving
-        if (!$this->isOnline($request->ip)) {
+        if (!$this->isOnline($device, $request->ip)) {
             return response()->json([
                 'message' => 'Device is offline, cannot add'
             ], 422);
@@ -138,7 +142,7 @@ class DeviceController extends Controller
         ]);
 
         // 🔥 Ping check BEFORE updating
-        if (!$this->isOnline($request->ip)) {
+        if (!$this->isOnline($device, $request->ip)) {
             return response()->json([
                 'message' => 'Device is offline, cannot add'
             ], 422);
@@ -208,7 +212,7 @@ class DeviceController extends Controller
         }
 
         // Check if device is online (ping)
-        if (!$this->isOnline($device->ip)) {
+        if (!$this->isOnline($device, $device->ip)) {
             return response()->json([
                 'status' => 'offline',
                 'message' => 'Device is offline',
@@ -284,23 +288,27 @@ class DeviceController extends Controller
         ]);
     }
 
-    private function isOnline(string $ip)
+    private function isOnline($device, string $ip)
     {
+        // Use device IP if not provided
+        if (!$ip) {
+            $ip = $device->ip;
+        }
+
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
             return false;
         }
 
-        // For IPs in the 192.168.x.x range, use WireGuard interface
-        if (strpos($ip, '192.168.') === 0) {
-            $ip = escapeshellarg($ip);
-            // Ping through wg0 interface specifically
-            exec("ping -c 1 -W 2 -I wg0 $ip", $output, $status);
-            return $status === 0;
-        }
+        // Let MikroTik do the ping via API
+        try {
+            $mikrotik = new MikrotikService($device);
+            $response = $mikrotik->ping($ip);
 
-        $ip = escapeshellarg($ip);
-        exec("ping -c 1 -W 1 $ip", $output, $status);
-        return $status === 0;
+            return isset($response['received']) && $response['received'] > 0;
+        } catch (\Exception $e) {
+            Log::warning("Ping failed for {$ip}: " . $e->getMessage());
+            return false;
+        }
     }
 
     public function cardStats()
@@ -323,7 +331,7 @@ class DeviceController extends Controller
             }
 
             // Check if device is online
-            $isOnline = $this->isOnline($device->ip);
+            $isOnline = $this->isOnline($device, $device->ip);
 
             if ($isOnline) {
                 $online++;

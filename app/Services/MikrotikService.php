@@ -249,4 +249,32 @@ class MikrotikService
             $this->client->query($remove)->read();
         }
     }
+
+    public function ping(string $ip, int $count = 2)
+    {
+        try {
+            $query = new \RouterOS\Query('/ping');
+            $query->equal('address', $ip);
+            $query->equal('count', $count);
+            $query->equal('interval', '100ms');
+
+            $response = $this->client->query($query)->read();
+
+            $result = ['sent' => 0, 'received' => 0, 'loss' => 100];
+
+            foreach ($response as $line) {
+                if (preg_match('/sent=(\d+) received=(\d+)/', $line, $matches)) {
+                    $result['sent'] = (int)$matches[1];
+                    $result['received'] = (int)$matches[2];
+                    $result['loss'] = (($result['sent'] - $result['received']) / $result['sent']) * 100;
+                    break;
+                }
+            }
+
+            return $result;
+        } catch (\Exception $e) {
+            Log::error("MikroTik ping failed for {$ip}: " . $e->getMessage());
+            return ['sent' => 0, 'received' => 0, 'loss' => 100];
+        }
+    }
 }
