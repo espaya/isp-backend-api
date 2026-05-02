@@ -347,7 +347,7 @@ class SubscriptionController extends Controller
                 return response()->json([
                     'has_active_subscription' => false,
                     'message' => 'No active subscription found'
-                ], 404);
+                ], 200);
             }
 
             // Extract reference safely
