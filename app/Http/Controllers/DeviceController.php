@@ -95,6 +95,23 @@ class DeviceController extends Controller
         }
     }
 
+    public function singleDevice($id)
+    {
+        try {
+            $device = Device::where('id', $id)->first();
+
+            if (!$device) {
+                return response()->json(['message' => 'Device not found!'], 404);
+            }
+
+            return response()->json($device, 200);
+
+        } catch (Exception $ex) {
+            Log::error("Error getting single device: " . $ex->getMessage());
+            return response()->json(['message' => "An unexpected error occurred"], 500);
+        }
+    }
+
 
     public function update(Request $request, $id)
     {
