@@ -284,21 +284,22 @@ class DeviceController extends Controller
         ]);
     }
 
-    private function isOnline($ip)
+    private function isOnline(string $ip)
     {
-        // Validate IP again just to be safe
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
             return false;
         }
 
-        $ip = escapeshellarg($ip); // 🔥 prevent command injection
-
-        if (strncasecmp(PHP_OS, 'WIN', 3) === 0) {
-            exec("ping -n 1 -w 1000 $ip", $output, $status);
-        } else {
-            exec("ping -c 1 -W 1 $ip", $output, $status);
+        // For IPs in the 192.168.x.x range, use WireGuard interface
+        if (strpos($ip, '192.168.') === 0) {
+            $ip = escapeshellarg($ip);
+            // Ping through wg0 interface specifically
+            exec("ping -c 1 -W 2 -I wg0 $ip", $output, $status);
+            return $status === 0;
         }
 
+        $ip = escapeshellarg($ip);
+        exec("ping -c 1 -W 1 $ip", $output, $status);
         return $status === 0;
     }
 
