@@ -32,7 +32,7 @@ class DeviceController extends Controller
         $request->validate([
             'name' => ['required', 'string', 'unique:devices,name', 'max:255'],
             'description' => ['nullable', 'string'],
-            'ip' => ['required', 'ip', 'unique:devices,ip'],
+            'ip' => ['required', 'ip',/* 'unique:devices,ip' */],
             'location' => ['required', 'string', 'max:255'],
             'monitorEnabled' => ['nullable', 'boolean'],
             'snmpCommunity' => ['required', 'string'],
