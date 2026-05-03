@@ -302,7 +302,15 @@ class DeviceController extends Controller
         // For IPs in the MikroTik's local network, use MikroTik API to ping
         if (strpos($ip, '192.168.10.') === 0 || strpos($ip, '192.168.88.') === 0) {
             try {
-                $mikrotik = new \App\Services\MikrotikService($device);
+                // Use the device with ID 1 (the WireGuard device)
+                $wgDevice = \App\Models\Device::find(1);
+
+                if (!$wgDevice) {
+                    Log::warning("Device ID 1 not found");
+                    return false;
+                }
+
+                $mikrotik = new \App\Services\MikrotikService($wgDevice);
                 $result = $mikrotik->ping($ip, 2);
                 return $result['received'] > 0;
             } catch (\Exception $e) {
