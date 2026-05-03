@@ -64,7 +64,7 @@ class DeviceController extends Controller
             'api_user.string' => 'Invalid inputs'
         ]);
 
-        $device = Device::where('ip', $request->ip)->first();
+        $device = Device::all();
 
 
         // 🔥 Ping check BEFORE saving
