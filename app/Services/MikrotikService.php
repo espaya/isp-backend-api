@@ -250,6 +250,9 @@ class MikrotikService
         }
     }
 
+    /**
+     * Ping an IP address from the MikroTik router
+     */
     public function ping(string $ip, int $count = 2)
     {
         try {
@@ -266,7 +269,9 @@ class MikrotikService
                 if (preg_match('/sent=(\d+) received=(\d+)/', $line, $matches)) {
                     $result['sent'] = (int)$matches[1];
                     $result['received'] = (int)$matches[2];
-                    $result['loss'] = (($result['sent'] - $result['received']) / $result['sent']) * 100;
+                    $result['loss'] = $result['sent'] > 0
+                        ? (($result['sent'] - $result['received']) / $result['sent']) * 100
+                        : 100;
                     break;
                 }
             }
