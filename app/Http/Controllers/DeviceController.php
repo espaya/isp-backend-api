@@ -306,7 +306,7 @@ class DeviceController extends Controller
                 $result = $mikrotik->ping($ip, 2);
                 return $result['received'] > 0;
             } catch (\Exception $e) {
-                \Log::warning("MikroTik ping failed for {$ip}: " . $e->getMessage());
+                Log::warning("MikroTik ping failed for {$ip}: " . $e->getMessage());
                 return false;
             }
         }
