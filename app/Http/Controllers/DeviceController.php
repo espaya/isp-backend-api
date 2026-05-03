@@ -299,16 +299,22 @@ class DeviceController extends Controller
             return false;
         }
 
-        // Let MikroTik do the ping via API
-        try {
-            $mikrotik = new MikrotikService($device);
-            $response = $mikrotik->ping($ip);
-
-            return isset($response['received']) && $response['received'] > 0;
-        } catch (\Exception $e) {
-            Log::warning("Ping failed for {$ip}: " . $e->getMessage());
-            return false;
+        // For IPs in the MikroTik's local network, use MikroTik API to ping
+        if (strpos($ip, '192.168.10.') === 0 || strpos($ip, '192.168.88.') === 0) {
+            try {
+                $mikrotik = new \App\Services\MikrotikService($device);
+                $result = $mikrotik->ping($ip, 2);
+                return $result['received'] > 0;
+            } catch (\Exception $e) {
+                \Log::warning("MikroTik ping failed for {$ip}: " . $e->getMessage());
+                return false;
+            }
         }
+
+        // For public IPs, ping directly from server
+        $ip = escapeshellarg($ip);
+        exec("ping -c 1 -W 2 $ip", $output, $status);
+        return $status === 0;
     }
 
     public function cardStats()
