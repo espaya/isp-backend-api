@@ -33,6 +33,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/all-devices', [DeviceController::class, 'index']);
     Route::get('/device-stats/{id}', [DeviceController::class, 'stats']);
     Route::get('/device-cards-stats', [DeviceController::class, 'cardStats']);
+    Route::delete('/device/delete/{id}', [DeviceController::class, 'destroy']);
 
     Route::get('/device-performance', [AdminDashboardController::class, 'devicePerformance']);
     Route::get('/system-status', [AdminDashboardController::class, 'systemStatus']);

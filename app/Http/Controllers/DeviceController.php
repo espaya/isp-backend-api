@@ -68,11 +68,11 @@ class DeviceController extends Controller
 
 
         // 🔥 Ping check BEFORE saving
-        if (!$this->isOnline($device, $request->ip)) {
-            return response()->json([
-                'message' => 'Device is offline, cannot add'
-            ], 422);
-        }
+        // if (!$this->isOnline($device, $request->ip)) {
+        //     return response()->json([
+        //         'message' => 'Device is offline, cannot add'
+        //     ], 422);
+        // }
 
         DB::beginTransaction();
 
@@ -131,7 +131,7 @@ class DeviceController extends Controller
             'ip' => [
                 'required',
                 'ip',
-                Rule::unique('devices', 'ip')->ignore($device->id),
+                // Rule::unique('devices', 'ip')->ignore($device->id),
             ],
             'location' => ['required', 'string', 'max:255'],
             'monitorEnabled' => ['nullable', 'boolean'],
@@ -142,11 +142,11 @@ class DeviceController extends Controller
         ]);
 
         // 🔥 Ping check BEFORE updating
-        if (!$this->isOnline($device, $request->ip)) {
-            return response()->json([
-                'message' => 'Device is offline, cannot add'
-            ], 422);
-        }
+        // if (!$this->isOnline($device, $request->ip)) {
+        //     return response()->json([
+        //         'message' => 'Device is offline, cannot add'
+        //     ], 422);
+        // }
 
         DB::beginTransaction();
 
@@ -201,7 +201,23 @@ class DeviceController extends Controller
         }
     }
 
-    public function destroy($id) {}
+    public function destroy($id)
+    {
+        try {
+            $device = Device::find($id);
+
+            if (!$device) {
+                return response()->json(['message' => 'Device not found'], 404);
+            }
+
+            $device->delete();
+
+            return response()->json(['message' => 'Device deleted successfully'], 200);
+        } catch (Exception $ex) {
+            Log::error("Error deleting device: " . $ex->getMessage());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
+        }
+    }
 
     public function stats($id)
     {
