@@ -48,4 +48,5 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
     // Payments Listing
     Route::get('/all-payments', [AdminPaymentsController::class, 'index']);
+    Route::delete('/payments/{id}', [AdminPaymentsController::class, 'destroy']);
 });

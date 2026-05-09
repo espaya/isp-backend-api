@@ -24,4 +24,23 @@ class AdminPaymentsController extends Controller
             return response()->json(['message' => 'An unexpected error occurred'], 500);
         }
     }
+
+    public function destroy(int $id)
+    {
+        try {
+            $payment = Payment::find($id);
+
+            if (!$payment) {
+                return response()->json(['message' => 'Payment not found'], 404);
+            }
+
+            $payment->delete();
+
+            return response()->json(['message' => 'Payment deleted successfully'], 200);
+        } catch (Exception $ex) {
+            Log::error($ex->getMessage());
+            return response()->json(['message' => 'An unexpected error occurred'], 500);
+        }
+    }
+
 }

@@ -201,7 +201,7 @@ class DeviceController extends Controller
         }
     }
 
-    public function destroy($id)
+    public function destroy(int $id)
     {
         try {
             $device = Device::find($id);
