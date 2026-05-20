@@ -34,8 +34,8 @@ class PaystackController extends Controller
             'package_id' => ['required', 'exists:packages,id'],
             'payment_method' => ['required', 'in:card,mobile_money'],
 
-            'name' => ['nullable', 'required_if:payment_method,card', 'string', 'max:255'],
-            'email' => ['nullable', 'required_if:payment_method,mobile_money', 'email'],
+            'name' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email'],
 
             // Mobile money
             'phone' => [
@@ -65,124 +65,67 @@ class PaystackController extends Controller
                 'required_if:payment_method,card',
                 'digits_between:3,4',
             ],
-
-        ], [
-            'package_id.required' => 'Please select a package.',
-            'package_id.exists' => 'Selected package does not exist.',
-
-            'payment_method.required' => 'Please select a payment method.',
-            'payment_method.in' => 'Invalid payment method selected.',
-
-            'name.required' => 'Please enter your name.',
-            'name.string' => 'Name must be a valid string.',
-            'name.max' => 'Name cannot exceed 255 characters.',
-
-            'email.required' => 'Please enter your email address.',
-            'email.email' => 'Please enter a valid email address.',
-
-            'phone.required_if' => 'Phone number is required for mobile money payments.',
-            'phone.regex' => 'Please enter a valid Ghanaian phone number (e.g., 0241234567).',
-
-            'provider.required_if' => 'Mobile money provider is required.',
-            'provider.in' => 'Invalid mobile money provider.',
-
-            'card_number.required_if' => 'Card number is required for card payments.',
-            'card_number.regex' => 'Card number must be 16 digits (spaces are ignored).',
-
-            'expiry.required_if' => 'Expiry date is required for card payments.',
-            'expiry.regex' => 'Expiry must be in MM/YY format.',
-
-            'cvv.required_if' => 'CVV is required for card payments.',
-            'cvv.digits_between' => 'CVV must be 3 or 4 digits.',
         ]);
 
         try {
-            // Check card expiry if card payment
-            if ($request->payment_method === 'card') {
-                [$month, $year] = explode('/', $request->expiry);
-                $year = '20' . $year;
-                if (strtotime("$year-$month-01") < strtotime(date('Y-m-01'))) {
-                    return back()->withErrors(['expiry' => 'Card has expired']);
-                }
-            }
-
             $package = Packages::findOrFail($request->package_id);
             $reference = 'ISP_' . uniqid();
+            $amount = $package->price * 100; // Paystack expects amount in kobo
 
             // Create a pending payment record
             Payment::create([
                 'user_id' => Auth::id(),
                 'package_id' => $package->id,
                 'reference' => $reference,
-                'amount' => $package->price * 100, // Paystack expects amount in kobo
+                'amount' => $amount,
                 'status' => 'pending',
             ]);
 
+            // Determine channels based on payment method
+            $channels = $request->payment_method === 'card' ? ['card'] : ['mobile_money'];
 
-            if ($request->payment_method === 'card') {
-                // Initialize card transaction
-                $payload = [
-                    'email' => Auth::user()->email,
-                    'amount' => $package->price * 100,
-                    'reference' => $reference,
-                    'channels' => ['card'],
-                    'callback_url' => config('app.frontend_url') . '/api/paystack/callback', //config('app.frontend_url') . '/dashboard/payment/success',
-                    'metadata' => [
-                        'user_id' => Auth::id(),
-                        'package_id' => $package->id,
-                    ],
+            // Build base payload
+            $payload = [
+                'email' => Auth::user()->email,
+                'amount' => $amount,
+                'reference' => $reference,
+                'channels' => $channels,
+                'callback_url' => config('app.frontend_url') . '/dashboard/payment/success',
+                'metadata' => [
+                    'user_id' => Auth::id(),
+                    'package_id' => $package->id,
+                ],
+            ];
+
+            // Add mobile money specific fields if needed
+            if ($request->payment_method === 'mobile_money') {
+                $payload['mobile_money'] = [
+                    'phone' => $request->phone,
+                    'provider' => strtolower($request->provider),
                 ];
-
-                $response = Http::withToken(config('services.paystack.secret_key'))
-                    ->post(config('services.paystack.base_url') . '/transaction/initialize', $payload);
-
-                $data = $response->json();
-
-                if (!$response->ok() || !isset($data['data']['authorization_url'])) {
-                    return response()->json(['message' => 'Paystack initialization failed', 'errors' => $data], 500);
-                }
-
-                return response()->json([
-                    'authorization_url' => $data['data']['authorization_url'],
-                    'reference' => $reference,
-                ]);
-            } elseif ($request->payment_method === 'mobile_money') {
-                // Mobile money charge
-                $payload = [
-                    'email' => Auth::user()->email,
-                    'amount' => $package->price * 100,
-                    'reference' => $reference,
-                    'currency' => 'GHS',
-                    'mobile_money' => [
-                        'phone' => $request->phone,
-                        'provider' => strtolower($request->provider), // must match Paystack code
-                    ],
-                    'metadata' => [
-                        'user_id' => Auth::id(),
-                        'package_id' => $package->id,
-                    ],
-                ];
-
-                $response = Http::withToken(config('services.paystack.secret_key'))
-                    ->post('https://api.paystack.co/charge', $payload);
-
-                $data = $response->json();
-
-                if (!$response->ok() || !isset($data['data']['status'])) {
-                    return response()->json(['message' => 'Paystack MoMo charge failed', 'errors' => $data], 500);
-                }
-
-
-                // For MoMo, status may be pay_offline; wait for webhook to confirm success
-                return response()->json([
-                    'reference' => $reference,
-                    'status' => $data['data']['status'],
-                    'display_text' => $data['data']['display_text'] ?? 'Check your phone to complete payment',
-                ]);
             }
+
+            // Initialize transaction with Paystack
+            $response = Http::withToken(config('services.paystack.secret_key'))
+                ->post(config('services.paystack.base_url') . '/transaction/initialize', $payload);
+
+            $data = $response->json();
+
+            if (!$response->ok() || !isset($data['data']['authorization_url'])) {
+                Log::error('Paystack initialization failed', ['response' => $data]);
+                return response()->json([
+                    'message' => 'Payment initialization failed. Please try again.',
+                    'errors' => $data
+                ], 500);
+            }
+
+            return response()->json([
+                'authorization_url' => $data['data']['authorization_url'],
+                'reference' => $reference,
+            ]);
         } catch (Exception $ex) {
-            Log::error($ex->getMessage() . 'on line' . $ex->getLine());
-            return response()->json(['message' => $ex->getMessage()], 500);
+            Log::error('Payment initialization error: ' . $ex->getMessage() . ' on line ' . $ex->getLine());
+            return response()->json(['message' => 'An unexpected error occurred. Please try again.'], 500);
         }
     }
 
