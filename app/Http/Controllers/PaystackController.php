@@ -34,7 +34,7 @@ class PaystackController extends Controller
             'package_id' => ['required', 'exists:packages,id'],
             'payment_method' => ['required', 'in:card,mobile_money'],
 
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['nullable', 'required_if:payment_method,card', 'string', 'max:255'],
             'email' => ['nullable', 'required_if:payment_method,mobile_money', 'email'],
 
             // Mobile money
