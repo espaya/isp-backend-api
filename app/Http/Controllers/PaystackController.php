@@ -41,7 +41,7 @@ class PaystackController extends Controller
             'phone' => [
                 'nullable',
                 'required_if:payment_method,mobile_money',
-                'regex:/^(0|\+233)[245][0-9]{8}$/'
+                // 'regex:/^(0|\+233)[245][0-9]{8}$/'
             ],
             'provider' => [
                 'nullable',
