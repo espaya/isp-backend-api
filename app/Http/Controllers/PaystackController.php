@@ -100,7 +100,7 @@ class PaystackController extends Controller
             // Add mobile money specific fields if needed
             if ($request->payment_method === 'mobile_money') {
                 $payload['mobile_money'] = [
-                    'phone' => $request->phone,
+                    // 'phone' => $request->phone,
                     'provider' => strtolower($request->provider),
                 ];
             }
