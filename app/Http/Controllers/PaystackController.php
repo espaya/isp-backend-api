@@ -99,8 +99,19 @@ class PaystackController extends Controller
 
             // Add mobile money specific fields if needed
             if ($request->payment_method === 'mobile_money') {
+                // Format phone number for Paystack
+                $phone = $request->phone;
+                // Remove any spaces
+                $phone = preg_replace('/\s+/', '', $phone);
+                // Remove leading '+' if present
+                $phone = ltrim($phone, '+');
+                // Convert local format to international (e.g., 024XXXXXXX -> 23324XXXXXXX)
+                if (preg_match('/^0([0-9]{9})$/', $phone, $matches)) {
+                    $phone = '233' . $matches[1];
+                }
+
                 $payload['mobile_money'] = [
-                    // 'phone' => $request->phone,
+                    'phone' => $phone,
                     'provider' => strtolower($request->provider),
                 ];
             }
