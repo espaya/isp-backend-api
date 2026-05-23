@@ -21,125 +21,6 @@ use Illuminate\Support\Facades\Mail;
 
 class PaystackController extends Controller
 {
-    // public function initialize(Request $request)
-    // {
-    //     // Preprocess card inputs
-    //     $request->merge([
-    //         'card_number' => str_replace(' ', '', $request->card_number ?? ''),
-    //         'expiry' => str_replace(' ', '', $request->expiry ?? ''),
-    //     ]);
-
-    //     // Validate inputs
-    //     $request->validate([
-    //         'package_id' => ['required', 'exists:packages,id'],
-    //         'payment_method' => ['required', 'in:card,mobile_money'],
-
-    //         'name' => ['nullable', 'string', 'max:255'],
-    //         'email' => ['nullable', 'email'],
-
-    //         // Mobile money
-    //         'phone' => [
-    //             'nullable',
-    //             'required_if:payment_method,mobile_money',
-    //             // 'regex:/^(0|\+233)[245][0-9]{8}$/'
-    //         ],
-    //         'provider' => [
-    //             'nullable',
-    //             'required_if:payment_method,mobile_money',
-    //             'in:mtn,telecel'
-    //         ],
-
-    //         // Card
-    //         'card_number' => [
-    //             'nullable',
-    //             'required_if:payment_method,card',
-    //             'regex:/^\d{16}$/'
-    //         ],
-    //         'expiry' => [
-    //             'nullable',
-    //             'required_if:payment_method,card',
-    //             'regex:/^(0[1-9]|1[0-2])\/\d{2}$/'
-    //         ],
-    //         'cvv' => [
-    //             'nullable',
-    //             'required_if:payment_method,card',
-    //             'digits_between:3,4',
-    //         ],
-    //     ]);
-
-    //     try {
-    //         $package = Packages::findOrFail($request->package_id);
-    //         $reference = 'ISP_' . uniqid();
-    //         $amount = $package->price * 100; // Paystack expects amount in kobo
-
-    //         // Create a pending payment record
-    //         Payment::create([
-    //             'user_id' => Auth::id(),
-    //             'package_id' => $package->id,
-    //             'reference' => $reference,
-    //             'amount' => $amount,
-    //             'status' => 'pending',
-    //         ]);
-
-    //         // Determine channels based on payment method
-    //         $channels = $request->payment_method === 'card' ? ['card'] : ['mobile_money'];
-
-    //         // Build base payload
-    //         $payload = [
-    //             'email' => Auth::user()->email,
-    //             'amount' => $amount,
-    //             'reference' => $reference,
-    //             'channels' => $channels,
-    //             'callback_url' => config('app.frontend_url') . '/dashboard/payment/success',
-    //             'metadata' => [
-    //                 'user_id' => Auth::id(),
-    //                 'package_id' => $package->id,
-    //             ],
-    //         ];
-
-    //         // Add mobile money specific fields if needed
-    //         if ($request->payment_method === 'mobile_money') {
-    //             // Format phone number for Paystack
-    //             $phone = $request->phone;
-    //             // Remove any spaces
-    //             $phone = preg_replace('/\s+/', '', $phone);
-    //             // Remove leading '+' if present
-    //             $phone = ltrim($phone, '+');
-    //             // Convert local format to international (e.g., 024XXXXXXX -> 23324XXXXXXX)
-    //             if (preg_match('/^0([0-9]{9})$/', $phone, $matches)) {
-    //                 $phone = '233' . $matches[1];
-    //             }
-
-    //             $payload['mobile_money'] = [
-    //                 'phone' => $phone,
-    //                 'provider' => strtolower($request->provider),
-    //             ];
-    //         }
-
-    //         // Initialize transaction with Paystack
-    //         $response = Http::withToken(config('services.paystack.secret_key'))
-    //             ->post(config('services.paystack.base_url') . '/transaction/initialize', $payload);
-
-    //         $data = $response->json();
-
-    //         if (!$response->ok() || !isset($data['data']['authorization_url'])) {
-    //             Log::error('Paystack initialization failed', ['response' => $data]);
-    //             return response()->json([
-    //                 'message' => 'Payment initialization failed. Please try again.',
-    //                 'errors' => $data
-    //             ], 500);
-    //         }
-
-    //         return response()->json([
-    //             'authorization_url' => $data['data']['authorization_url'],
-    //             'reference' => $reference,
-    //         ]);
-    //     } catch (Exception $ex) {
-    //         Log::error('Payment initialization error: ' . $ex->getMessage() . ' on line ' . $ex->getLine());
-    //         return response()->json(['message' => 'An unexpected error occurred. Please try again.'], 500);
-    //     }
-    // }
-
     public function initialize(Request $request)
     {
         // Preprocess card inputs
@@ -156,7 +37,12 @@ class PaystackController extends Controller
             'name' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email'],
 
-            // Mobile money - phone validation removed, will be collected on Paystack page
+            // Mobile money
+            'phone' => [
+                'nullable',
+                'required_if:payment_method,mobile_money',
+                // 'regex:/^(0|\+233)[245][0-9]{8}$/'
+            ],
             'provider' => [
                 'nullable',
                 'required_if:payment_method,mobile_money',
@@ -203,7 +89,7 @@ class PaystackController extends Controller
                 'email' => Auth::user()->email,
                 'amount' => $amount,
                 'reference' => $reference,
-                'channels' => $channels, // This tells Paystack which payment methods to show
+                'channels' => $channels,
                 'callback_url' => config('app.frontend_url') . '/dashboard/payment/success',
                 'metadata' => [
                     'user_id' => Auth::id(),
@@ -211,8 +97,24 @@ class PaystackController extends Controller
                 ],
             ];
 
-            // DO NOT add mobile_money field - let Paystack handle it
-            // The user will enter their phone number on Paystack's page
+            // Add mobile money specific fields if needed
+            // if ($request->payment_method === 'mobile_money') {
+            //     // Format phone number for Paystack
+            //     $phone = $request->phone;
+            //     // Remove any spaces
+            //     $phone = preg_replace('/\s+/', '', $phone);
+            //     // Remove leading '+' if present
+            //     $phone = ltrim($phone, '+');
+            //     // Convert local format to international (e.g., 024XXXXXXX -> 23324XXXXXXX)
+            //     if (preg_match('/^0([0-9]{9})$/', $phone, $matches)) {
+            //         $phone = '233' . $matches[1];
+            //     }
+
+            //     $payload['mobile_money'] = [
+            //         'phone' => $phone,
+            //         'provider' => strtolower($request->provider),
+            //     ];
+            // }
 
             // Initialize transaction with Paystack
             $response = Http::withToken(config('services.paystack.secret_key'))
@@ -237,6 +139,8 @@ class PaystackController extends Controller
             return response()->json(['message' => 'An unexpected error occurred. Please try again.'], 500);
         }
     }
+
+    
 
     public function verify(Request $request, string $reference)
     {
