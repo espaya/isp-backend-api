@@ -97,25 +97,6 @@ class PaystackController extends Controller
                 ],
             ];
 
-            // Add mobile money specific fields if needed
-            // if ($request->payment_method === 'mobile_money') {
-            //     // Format phone number for Paystack
-            //     $phone = $request->phone;
-            //     // Remove any spaces
-            //     $phone = preg_replace('/\s+/', '', $phone);
-            //     // Remove leading '+' if present
-            //     $phone = ltrim($phone, '+');
-            //     // Convert local format to international (e.g., 024XXXXXXX -> 23324XXXXXXX)
-            //     if (preg_match('/^0([0-9]{9})$/', $phone, $matches)) {
-            //         $phone = '233' . $matches[1];
-            //     }
-
-            //     $payload['mobile_money'] = [
-            //         'phone' => $phone,
-            //         'provider' => strtolower($request->provider),
-            //     ];
-            // }
-
             // Initialize transaction with Paystack
             $response = Http::withToken(config('services.paystack.secret_key'))
                 ->post(config('services.paystack.base_url') . '/transaction/initialize', $payload);
@@ -140,7 +121,7 @@ class PaystackController extends Controller
         }
     }
 
-    
+
 
     public function verify(Request $request, string $reference)
     {
@@ -154,6 +135,7 @@ class PaystackController extends Controller
                 ->get(config('services.paystack.base_url') . "/transaction/verify/{$reference}");
 
             Log::info('Paystack verification response status: ' . $response->status());
+            Log::info('Paystack full response: ' . $response->body());
 
             if (!$response->ok()) {
                 DB::rollBack();
@@ -163,9 +145,23 @@ class PaystackController extends Controller
 
             $data = $response->json()['data'] ?? null;
 
-            if (!$data || ($data['status'] ?? 'failed') !== 'success') {
+            // Log the actual status from Paystack
+            Log::info('Paystack transaction status: ' . ($data['status'] ?? 'unknown'));
+
+            // ⚠️ IMPORTANT: Check if status is 'success' (not 'pending' or 'abandoned')
+            if (!$data || $data['status'] !== 'success') {
                 DB::rollBack();
-                Log::error('Payment not successful for reference: ' . $reference, ['data' => $data]);
+                Log::error('Payment not successful for reference: ' . $reference, [
+                    'status' => $data['status'] ?? 'null',
+                    'gateway_response' => $data['gateway_response'] ?? 'null'
+                ]);
+
+                // Update payment status to match Paystack
+                Payment::where('reference', $reference)->update([
+                    'status' => $data['status'] ?? 'failed',
+                    'gateway_response' => $data['gateway_response'] ?? null,
+                ]);
+
                 return response()->json([
                     'message' => $data['gateway_response'] ?? 'Payment not successful',
                     'status' => $data['status'] ?? 'failed'
@@ -211,6 +207,8 @@ class PaystackController extends Controller
                 'gateway_response' => $data['gateway_response'] ?? null,
             ]);
 
+            Log::info('Payment updated to success for reference: ' . $reference);
+
             $password = Str::random(8);
 
             // 3️⃣ Create subscription
@@ -231,6 +229,8 @@ class PaystackController extends Controller
                 'hotspot_password' => $password,
             ]);
 
+            Log::info('Subscription created for reference: ' . $reference . ', ID: ' . $subscription->id);
+
             // Try to create Mikrotik user, but don't fail if it doesn't work
             try {
                 $selector = new DeviceSelectorService();
@@ -248,10 +248,10 @@ class PaystackController extends Controller
                         expiresAt: $subscription->expires_at
                     );
                     $device->increment('current_clients');
+                    Log::info('Mikrotik user created for: ' . $user->email);
                 }
             } catch (\Exception $e) {
                 Log::warning('Mikrotik user creation failed but subscription is active: ' . $e->getMessage());
-                // Don't rollback - subscription is still valid
             }
 
             $subscription->hotspot_password = $password;
