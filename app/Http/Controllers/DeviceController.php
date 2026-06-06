@@ -33,7 +33,7 @@ class DeviceController extends Controller
         $request->validate([
             'name' => ['required', 'string', 'unique:devices,name', 'max:255'],
             'description' => ['nullable', 'string'],
-            'ip' => ['required', 'ip',/* 'unique:devices,ip' */],
+            'ip' => ['required', 'ip'],
             'location' => ['required', 'string', 'max:255'],
             'monitorEnabled' => ['nullable', 'boolean'],
             'snmpCommunity' => ['required', 'string'],
@@ -41,35 +41,29 @@ class DeviceController extends Controller
             'api_password' => ['required', 'string'],
             'api_user' => ['required', 'string']
         ], [
-            'name.required' => 'Device name is required.',
-            'name.unique' => 'A device with this name already exists.',
-            'name.max' => 'Device name must not exceed 255 characters.',
-
-            'ip.required' => 'IP address is required.',
-            'ip.ip' => 'Please provide a valid IP address.',
-            'ip.unique' => 'This IP address is already assigned to another device.',
-
-            'location.required' => 'Device location is required.',
-            'location.max' => 'Location must not exceed 255 characters.',
-
-            'monitorEnabled.boolean' => 'Monitor enabled must be true or false.',
-
-            'snmpCommunity.required' => 'SNMP community is required.',
-            'snmpCommunity.string' => 'SNMP community must be a valid string.',
-
-            'model.required' => 'Device model is required.',
-            'model.max' => 'Device model must not exceed 255 characters.',
-            'api_password.required' => 'This field is required',
-            'api_password.string' => 'Invalid inputs',
-            'api_user.required' => 'This field is required',
-            'api_user.string' => 'Invalid inputs'
+            'name.required' => 'Device name is required',
+            'name.unique' => 'Device name must be unique',
+            'ip.required' => 'IP address is required',
+            'ip.ip' => 'Invalid IP address format',
+            'location.required' => 'Location is required',
+            'snmpCommunity.required' => 'SNMP community string is required',
+            'model.required' => 'Device model is required',
+            'api_user.required' => 'API username is required',
+            'api_password.required' => 'API password is required'
         ]);
 
-        $device = Device::all();
+        // ❌ REMOVE THIS LINE - You're getting ALL devices, not a single device
+        // $device = Device::all();
 
+        // ✅ Create a temporary device object for the ping check
+        $tempDevice = new Device();
+        $tempDevice->ip = $request->ip;
+        $tempDevice->api_user = $request->api_user;
+        $tempDevice->api_password = $request->api_password;
+        $tempDevice->monitorEnabled = $request->monitorEnabled ?? true;
 
-        // 🔥 Ping check BEFORE saving
-        if (!$this->isOnline($device, $request->ip)) {
+        // 🔥 Ping check BEFORE saving using the temporary device
+        if (!$this->isOnline($tempDevice, $request->ip)) {
             return response()->json([
                 'message' => 'Device is offline, cannot add'
             ], 422);
@@ -83,7 +77,7 @@ class DeviceController extends Controller
                 'description' => $request->description ?? "",
                 'ip' => $request->ip,
                 'location' => $request->location,
-                'monitorEnabled' => $request->monitorEnabled,
+                'monitorEnabled' => $request->monitorEnabled ?? false,
                 'snmpCommunity' => $request->snmpCommunity,
                 'model' => $request->model,
                 'api_user' => $request->api_user,
@@ -92,7 +86,7 @@ class DeviceController extends Controller
 
             DB::commit();
 
-            return response()->json(['message' => 'Add device added successfully'], 200);
+            return response()->json(['message' => 'Device added successfully'], 200);
         } catch (Exception $ex) {
             DB::rollBack();
             Log::error($ex->getMessage());
