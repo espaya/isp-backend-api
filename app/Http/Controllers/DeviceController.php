@@ -313,29 +313,27 @@ class DeviceController extends Controller
             return false;
         }
 
-        $cacheKey = "device_online_{$device->id}_{$ip}";
+        // If monitoring is disabled, assume online
+        if (!$device->monitorEnabled) {
+            return true;
+        }
 
-        return Cache::remember($cacheKey, now()->addMinutes(1), function () use ($device, $ip) {
+        // Try API ping
+        try {
+            $mikrotik = new \App\Services\MikrotikService($device);
+            $result = $mikrotik->ping($ip, 2);
+            $isOnline = isset($result['received']) && $result['received'] > 0;
 
-            if (!$device->monitorEnabled) {
-                return true;
-            }
+            // Update device status in database
+            $device->status = $isOnline ? 'online' : 'offline';
+            $device->save();
 
-            // Try API ping first (works for all MikroTik devices)
-            try {
-                $mikrotik = new \App\Services\MikrotikService($device);
-                $result = $mikrotik->ping($ip, 2);
-                return isset($result['received']) && $result['received'] > 0;
-            } catch (\Exception $e) {
-                // API failed, fall back to direct ping
-                Log::debug("API ping failed for {$ip}, falling back to ICMP: " . $e->getMessage());
-            }
-
-            // Fallback: direct ICMP ping
-            $ip = escapeshellarg($ip);
-            exec("ping -c 1 -W 2 $ip", $output, $status);
-            return $status === 0;
-        });
+            return $isOnline;
+        } catch (\Exception $e) {
+            // If API fails, assume device is online (don't mark as offline)
+            Log::warning("API check failed for device {$device->id}, assuming online: " . $e->getMessage());
+            return true;
+        }
     }
 
     public function cardStats()
