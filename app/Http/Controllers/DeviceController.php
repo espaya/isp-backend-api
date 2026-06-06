@@ -313,34 +313,25 @@ class DeviceController extends Controller
             return false;
         }
 
-        // Use caching to avoid excessive pings
         $cacheKey = "device_online_{$device->id}_{$ip}";
 
         return Cache::remember($cacheKey, now()->addMinutes(1), function () use ($device, $ip) {
 
-            // If monitoring is disabled, assume online
             if (!$device->monitorEnabled) {
                 return true;
             }
 
-            // For local network IPs, ping through the device's own MikroTik connection
-            $isLocalIp = strpos($ip, '192.168.') === 0 ||
-                strpos($ip, '10.') === 0 ||
-                strpos($ip, '172.16.') === 0;
-
-            if ($isLocalIp) {
-                try {
-                    // Use the device's own API credentials to ping
-                    $mikrotik = new \App\Services\MikrotikService($device);
-                    $result = $mikrotik->ping($ip, 2);
-                    return isset($result['received']) && $result['received'] > 0;
-                } catch (\Exception $e) {
-                    Log::warning("MikroTik ping failed for {$ip}: " . $e->getMessage());
-                    return false;
-                }
+            // Try API ping first (works for all MikroTik devices)
+            try {
+                $mikrotik = new \App\Services\MikrotikService($device);
+                $result = $mikrotik->ping($ip, 2);
+                return isset($result['received']) && $result['received'] > 0;
+            } catch (\Exception $e) {
+                // API failed, fall back to direct ping
+                Log::debug("API ping failed for {$ip}, falling back to ICMP: " . $e->getMessage());
             }
 
-            // For public IPs, ping directly from server
+            // Fallback: direct ICMP ping
             $ip = escapeshellarg($ip);
             exec("ping -c 1 -W 2 $ip", $output, $status);
             return $status === 0;
