@@ -505,10 +505,11 @@ class DeviceController extends Controller
                     'ping_result' => $result
                 ]);
             } catch (\Exception $e) {
+                // Don't log here - just return error
                 return response()->json([
                     'success' => false,
                     'status' => 'offline',
-                    'message' => 'Connection failed: ' . $e->getMessage(),
+                    'message' => 'Connection failed: Unable to reach device',
                     'error' => $e->getMessage()
                 ], 500);
             }
