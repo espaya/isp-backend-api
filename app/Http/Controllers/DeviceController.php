@@ -301,13 +301,12 @@ class DeviceController extends Controller
             return false;
         }
 
-        // If monitoring is disabled, assume online
+        // If monitoring is disabled, assume online (user chose not to monitor)
         if (!$device->monitorEnabled) {
             Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
             return true;
         }
 
-        // Try API ping with detailed logging
         Log::info("isOnline: Attempting to ping {$ip} from device {$device->id}");
 
         try {
@@ -346,8 +345,11 @@ class DeviceController extends Controller
                 'file' => basename($e->getFile())
             ]);
 
-            // If API fails, assume device is online
-            return true;
+            // ✅ FIXED: If API fails, mark as OFFLINE (not online)
+            $device->status = 'offline';
+            $device->save();
+
+            return false;  // Changed from 'return true' to 'return false'
         }
     }
 
