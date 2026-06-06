@@ -38,7 +38,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/device-performance', [AdminDashboardController::class, 'devicePerformance']);
     Route::get('/system-status', [AdminDashboardController::class, 'systemStatus']);
 
-     Route::get('/ping', [DeviceController::class, 'isOnline']);
+     Route::get('/ping', [DeviceController::class, 'pingDevice']);
 
     // Packages 
     Route::get('/all-packages', [PackagesController::class, 'index']);
