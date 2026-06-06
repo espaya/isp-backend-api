@@ -52,27 +52,10 @@ class DeviceController extends Controller
             'api_password.required' => 'API password is required'
         ]);
 
-        // ❌ REMOVE THIS LINE - You're getting ALL devices, not a single device
-        // $device = Device::all();
-
-        // ✅ Create a temporary device object for the ping check
-        $tempDevice = new Device();
-        $tempDevice->ip = $request->ip;
-        $tempDevice->api_user = $request->api_user;
-        $tempDevice->api_password = $request->api_password;
-        $tempDevice->monitorEnabled = $request->monitorEnabled ?? true;
-
-        // 🔥 Ping check BEFORE saving using the temporary device
-        if (!$this->isOnline($tempDevice, $request->ip)) {
-            return response()->json([
-                'message' => 'Device is offline, cannot add'
-            ], 422);
-        }
-
         DB::beginTransaction();
 
         try {
-            Device::create([
+            $device = Device::create([
                 'name' => $request->name,
                 'description' => $request->description ?? "",
                 'ip' => $request->ip,
@@ -83,8 +66,15 @@ class DeviceController extends Controller
                 'api_user' => $request->api_user,
                 'api_password' => $request->api_password,
             ]);
-
-            DB::commit();
+            // ✅ Now test connectivity after device is created (has an ID)
+            if (!$this->isOnline($device, $device->ip)) {
+                // Device is offline, but we already added it
+                // Optionally mark it as offline or just return warning
+                return response()->json([
+                    'message' => 'Device added but appears to be offline. Please check connectivity.',
+                    'device' => $device
+                ], 200);
+            }
 
             return response()->json(['message' => 'Device added successfully'], 200);
         } catch (Exception $ex) {
