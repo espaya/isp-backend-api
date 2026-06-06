@@ -69,11 +69,11 @@ class DeviceController extends Controller
 
 
         // 🔥 Ping check BEFORE saving
-        // if (!$this->isOnline($device, $request->ip)) {
-        //     return response()->json([
-        //         'message' => 'Device is offline, cannot add'
-        //     ], 422);
-        // }
+        if (!$this->isOnline($device, $request->ip)) {
+            return response()->json([
+                'message' => 'Device is offline, cannot add'
+            ], 422);
+        }
 
         DB::beginTransaction();
 
@@ -96,7 +96,7 @@ class DeviceController extends Controller
         } catch (Exception $ex) {
             DB::rollBack();
             Log::error($ex->getMessage());
-            return response()->json(['message' => 'An unexpected error occurred'], 500);
+            return response()->json(['message' => $ex->getMessage()], 500);
         }
     }
 
