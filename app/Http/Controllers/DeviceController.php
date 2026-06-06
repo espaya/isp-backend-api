@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Cache;
 
 
 class DeviceController extends Controller
@@ -304,41 +305,46 @@ class DeviceController extends Controller
         ]);
     }
 
-    private function isOnline($device, string $ip)
+    private function isOnline(object $device, $ip = null)
     {
-        // Use device IP if not provided
-        if (!$ip) {
-            $ip = $device->ip;
-        }
+        $ip = $ip ?? $device->ip;
 
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
             return false;
         }
 
-        // For IPs in the MikroTik's local network, use MikroTik API to ping
-        if (strpos($ip, '192.168.10.') === 0 || strpos($ip, '192.168.88.') === 0) {
-            try {
-                // Use the device with ID 1 (the WireGuard device)
-                $wgDevice = \App\Models\Device::find(1);
+        // Use caching to avoid excessive pings
+        $cacheKey = "device_online_{$device->id}_{$ip}";
 
-                if (!$wgDevice) {
-                    Log::warning("Device ID 1 not found");
+        return Cache::remember($cacheKey, now()->addMinutes(1), function () use ($device, $ip) {
+
+            // If monitoring is disabled, assume online
+            if (!$device->monitorEnabled) {
+                return true;
+            }
+
+            // For local network IPs, ping through the device's own MikroTik connection
+            $isLocalIp = strpos($ip, '192.168.') === 0 ||
+                strpos($ip, '10.') === 0 ||
+                strpos($ip, '172.16.') === 0;
+
+            if ($isLocalIp) {
+                try {
+                    // Use the device's own API credentials to ping
+                    $mikrotik = new \App\Services\MikrotikService($device);
+                    $result = $mikrotik->ping($ip, 2);
+                    return isset($result['received']) && $result['received'] > 0;
+                } catch (\Exception $e) {
+                    Log::warning("MikroTik ping failed for {$ip}: " . $e->getMessage());
                     return false;
                 }
-
-                $mikrotik = new \App\Services\MikrotikService($wgDevice);
-                $result = $mikrotik->ping($ip, 2);
-                return $result['received'] > 0;
-            } catch (\Exception $e) {
-                Log::warning("MikroTik ping failed for {$ip}: " . $e->getMessage());
-                return false;
             }
-        }
 
-        // For public IPs, ping directly from server
-        $ip = escapeshellarg($ip);
-        exec("ping -c 1 -W 2 $ip", $output, $status);
-        return $status === 0;
+            // For public IPs, ping directly from server
+            $ip = escapeshellarg($ip);
+            exec("ping -c 1 -W 2 $ip", $output, $status);
+            return $status === 0;
+        });
     }
 
     public function cardStats()

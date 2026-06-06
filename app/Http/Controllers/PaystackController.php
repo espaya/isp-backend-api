@@ -121,8 +121,6 @@ class PaystackController extends Controller
         }
     }
 
-
-
     public function verify(Request $request, string $reference)
     {
         DB::beginTransaction();
