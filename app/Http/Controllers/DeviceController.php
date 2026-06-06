@@ -310,19 +310,41 @@ class DeviceController extends Controller
         $ip = $ip ?? $device->ip;
 
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            Log::info("isOnline: Invalid IP address {$ip}");
             return false;
         }
 
         // If monitoring is disabled, assume online
         if (!$device->monitorEnabled) {
+            Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
             return true;
         }
 
-        // Try API ping
+        // Try API ping with detailed logging
+        Log::info("isOnline: Attempting to ping {$ip} from device {$device->id}");
+
         try {
             $mikrotik = new \App\Services\MikrotikService($device);
+            Log::info("isOnline: MikrotikService created successfully");
+
+            $startTime = microtime(true);
             $result = $mikrotik->ping($ip, 2);
+            $endTime = microtime(true);
+            $duration = round(($endTime - $startTime) * 1000, 2);
+
+            Log::info("isOnline: Ping completed in {$duration}ms", [
+                'ip' => $ip,
+                'sent' => $result['sent'],
+                'received' => $result['received'],
+                'loss' => $result['loss']
+            ]);
+
             $isOnline = isset($result['received']) && $result['received'] > 0;
+
+            Log::info("isOnline: Device {$device->id} is " . ($isOnline ? "ONLINE" : "OFFLINE"), [
+                'received' => $result['received'] ?? 0,
+                'sent' => $result['sent'] ?? 0
+            ]);
 
             // Update device status in database
             $device->status = $isOnline ? 'online' : 'offline';
@@ -330,8 +352,14 @@ class DeviceController extends Controller
 
             return $isOnline;
         } catch (\Exception $e) {
-            // If API fails, assume device is online (don't mark as offline)
-            Log::warning("API check failed for device {$device->id}, assuming online: " . $e->getMessage());
+            Log::error("isOnline: API check failed for device {$device->id}", [
+                'ip' => $ip,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => basename($e->getFile())
+            ]);
+
+            // If API fails, assume device is online
             return true;
         }
     }
