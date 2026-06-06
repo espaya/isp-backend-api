@@ -66,6 +66,9 @@ class DeviceController extends Controller
                 'api_user' => $request->api_user,
                 'api_password' => $request->api_password,
             ]);
+
+            DB::commit();
+
             // ✅ Now test connectivity after device is created (has an ID)
             if (!$this->isOnline($device, $device->ip)) {
                 // Device is offline, but we already added it
