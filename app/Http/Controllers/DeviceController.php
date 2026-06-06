@@ -468,4 +468,55 @@ class DeviceController extends Controller
             return "0:00:00";
         }
     }
+
+
+    public function pingDevice(Request $request)
+    {
+        try {
+            $deviceId = $request->input('device_id', 1);
+            $device = Device::find($deviceId);
+
+            if (!$device) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Device not found'
+                ], 404);
+            }
+
+            // Test connection to MikroTik
+            $startTime = microtime(true);
+
+            try {
+                $mikrotik = new \App\Services\MikrotikService($device);
+                $result = $mikrotik->ping($device->ip, 2);
+                $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+
+                $isOnline = isset($result['received']) && $result['received'] > 0;
+
+                // Update device status
+                $device->status = $isOnline ? 'online' : 'offline';
+                $device->save();
+
+                return response()->json([
+                    'success' => $isOnline,
+                    'status' => $isOnline ? 'online' : 'offline',
+                    'message' => $isOnline ? 'Device is online' : 'Device is offline',
+                    'response_time' => $responseTime . 'ms',
+                    'ping_result' => $result
+                ]);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'status' => 'offline',
+                    'message' => 'Connection failed: ' . $e->getMessage(),
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
