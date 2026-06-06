@@ -275,9 +275,12 @@ class MikrotikService
             $result = ['sent' => 0, 'received' => 0, 'loss' => 100];
 
             foreach ($response as $line) {
-                Log::debug("MikroTik ping: Response line: " . $line);
+                // ✅ FIX: Convert array to string if needed
+                $lineStr = is_array($line) ? implode(' ', $line) : (string)$line;
 
-                if (preg_match('/sent=(\d+) received=(\d+)/', $line, $matches)) {
+                Log::debug("MikroTik ping: Response line: " . $lineStr);
+
+                if (preg_match('/sent=(\d+) received=(\d+)/', $lineStr, $matches)) {
                     $result['sent'] = (int)$matches[1];
                     $result['received'] = (int)$matches[2];
                     $result['loss'] = $result['sent'] > 0
