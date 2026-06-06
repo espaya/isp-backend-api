@@ -294,49 +294,55 @@ class DeviceController extends Controller
 
     private function isOnline(object $device, $ip = null)
     {
-        $ip = $ip ?? $device->ip;
+        // $ip = $ip ?? $device->ip;
 
-        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            Log::info("isOnline: Invalid IP address {$ip}");
-            return false;
-        }
+        // if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        //     Log::info("isOnline: Invalid IP address {$ip}");
+        //     return false;
+        // }
 
-        // If monitoring is disabled, assume online (user chose not to monitor)
-        if (!$device->monitorEnabled) {
-            Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
-            return true;
-        }
+        // // If monitoring is disabled, assume online (user chose not to monitor)
+        // if (!$device->monitorEnabled) {
+        //     Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
+        //     return true;
+        // }
 
-        Log::info("isOnline: Attempting to ping {$ip} from device {$device->id}");
+        // Log::info("isOnline: Attempting to ping {$ip} from device {$device->id}");
 
         try {
-            $mikrotik = new \App\Services\MikrotikService($device);
-            Log::info("isOnline: MikrotikService created successfully");
+            //     $mikrotik = new \App\Services\MikrotikService($device);
+            //     Log::info("isOnline: MikrotikService created successfully");
 
-            $startTime = microtime(true);
-            $result = $mikrotik->ping($ip, 2);
-            $endTime = microtime(true);
-            $duration = round(($endTime - $startTime) * 1000, 2);
+            //     $startTime = microtime(true);
+            //     $result = $mikrotik->ping($ip, 2);
+            //     $endTime = microtime(true);
+            //     $duration = round(($endTime - $startTime) * 1000, 2);
 
-            Log::info("isOnline: Ping completed in {$duration}ms", [
-                'ip' => $ip,
-                'sent' => $result['sent'],
-                'received' => $result['received'],
-                'loss' => $result['loss']
-            ]);
+            //     Log::info("isOnline: Ping completed in {$duration}ms", [
+            //         'ip' => $ip,
+            //         'sent' => $result['sent'],
+            //         'received' => $result['received'],
+            //         'loss' => $result['loss']
+            //     ]);
 
-            $isOnline = isset($result['received']) && $result['received'] > 0;
+            //     $isOnline = isset($result['received']) && $result['received'] > 0;
 
-            Log::info("isOnline: Device {$device->id} is " . ($isOnline ? "ONLINE" : "OFFLINE"), [
-                'received' => $result['received'] ?? 0,
-                'sent' => $result['sent'] ?? 0
-            ]);
+            //     Log::info("isOnline: Device {$device->id} is " . ($isOnline ? "ONLINE" : "OFFLINE"), [
+            //         'received' => $result['received'] ?? 0,
+            //         'sent' => $result['sent'] ?? 0
+            //     ]);
 
-            // Update device status in database
-            $device->status = $isOnline ? 'online' : 'offline';
-            $device->save();
+            //     // Update device status in database
+            //     $device->status = $isOnline ? 'online' : 'offline';
+            //     $device->save();
 
-            return $isOnline;
+            //     return $isOnline;
+
+            // Simple ping check instead of API
+            $ip = $ip ?? $device->ip;
+            $ip = escapeshellarg($ip);
+            exec("ping -c 1 -W 2 $ip", $output, $status);
+            return $status === 0;
         } catch (\Exception $e) {
             Log::error("isOnline: API check failed for device {$device->id}", [
                 'ip' => $ip,
