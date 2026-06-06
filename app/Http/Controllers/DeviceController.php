@@ -509,7 +509,7 @@ class DeviceController extends Controller
                 return response()->json([
                     'success' => false,
                     'status' => 'offline',
-                    'message' => 'Connection failed: Unable to reach device',
+                    'message' => $e->getMessage(),
                     'error' => $e->getMessage()
                 ], 500);
             }
