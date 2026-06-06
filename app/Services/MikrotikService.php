@@ -255,51 +255,42 @@ class MikrotikService
      */
     public function ping(string $ip, int $count = 2)
     {
-        Log::info("MikroTik ping: Starting ping to {$ip} with count {$count}");
-
         try {
             $query = new \RouterOS\Query('/ping');
             $query->equal('address', $ip);
             $query->equal('count', $count);
             $query->equal('interval', '100ms');
 
-            Log::info("MikroTik ping: Executing query", ['ip' => $ip]);
-
             $response = $this->client->query($query)->read();
-
-            Log::info("MikroTik ping: Response received", [
-                'ip' => $ip,
-                'response_lines' => count($response)
-            ]);
 
             $result = ['sent' => 0, 'received' => 0, 'loss' => 100];
 
+            // Parse RouterOS ping output format
             foreach ($response as $line) {
-                // ✅ FIX: Convert array to string if needed
+                // Convert to string if array
                 $lineStr = is_array($line) ? implode(' ', $line) : (string)$line;
 
-                Log::debug("MikroTik ping: Response line: " . $lineStr);
+                // RouterOS format: "0 10.0.0.2 56 64 359us 1 1 0 ..."
+                // Fields: seq host size ttl time sent received loss
+                $parts = preg_split('/\s+/', trim($lineStr));
 
-                if (preg_match('/sent=(\d+) received=(\d+)/', $lineStr, $matches)) {
-                    $result['sent'] = (int)$matches[1];
-                    $result['received'] = (int)$matches[2];
-                    $result['loss'] = $result['sent'] > 0
-                        ? round((($result['sent'] - $result['received']) / $result['sent']) * 100, 2)
-                        : 100;
+                if (count($parts) >= 7) {
+                    // sent is at index 5 (6th field)
+                    // received is at index 6 (7th field)
+                    $sent = (int)$parts[5];
+                    $received = (int)$parts[6];
 
-                    Log::info("MikroTik ping: Results parsed", $result);
-                    break;
+                    if ($sent > 0) {
+                        $result['sent'] = $sent;
+                        $result['received'] = $received;
+                        $result['loss'] = round((($sent - $received) / $sent) * 100, 2);
+                    }
                 }
             }
 
             return $result;
         } catch (\Exception $e) {
-            Log::error("MikroTik ping failed for {$ip}", [
-                'error' => $e->getMessage(),
-                'code' => $e->getCode(),
-                'line' => $e->getLine()
-            ]);
-
+            Log::error("MikroTik ping failed for {$ip}: " . $e->getMessage());
             return ['sent' => 0, 'received' => 0, 'loss' => 100];
         }
     }
