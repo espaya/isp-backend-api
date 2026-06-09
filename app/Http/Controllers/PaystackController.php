@@ -42,7 +42,6 @@ class PaystackController extends Controller
             'phone' => [
                 'nullable',
                 'required_if:payment_method,mobile_money',
-                // 'regex:/^(0|\+233)[245][0-9]{8}$/'
             ],
             'provider' => [
                 'nullable',
@@ -73,10 +72,9 @@ class PaystackController extends Controller
             $reference = 'ISP_' . uniqid();
             $amount = $package->price * 100; // Paystack expects amount in kobo
 
-            // Create a pending payment record
+            // Create a pending payment record (package_id removed)
             Payment::create([
                 'user_id' => Auth::id(),
-                'package_id' => $package->id,
                 'reference' => $reference,
                 'amount' => $amount,
                 'status' => 'pending',
@@ -326,13 +324,13 @@ class PaystackController extends Controller
                 $payment->gateway_response = $data['gateway_response'] ?? null;
                 $payment->save();
 
-                // Get package and user
+                // Get package and user from metadata only (payment has no package_id)
                 $metadata = $data['metadata'] ?? [];
-                $package = Packages::find($metadata['package_id'] ?? $payment->package_id);
+                $package = Packages::find($metadata['package_id'] ?? null);
                 $user = User::find($metadata['user_id'] ?? $payment->user_id);
 
                 if (!$package || !$user) {
-                    throw new Exception('Package or user not found');
+                    throw new Exception('Package or user not found from metadata');
                 }
 
                 // Generate password
@@ -373,7 +371,7 @@ class PaystackController extends Controller
                 }
 
                 DB::commit();
-                Log::info('Paystack webhook: Subscription activated', ['reference' => $reference]);
+                Log::info('Paystack webhook: Subscription activated', ['reference' => $reference, 'subscription_id' => $subscription->id]);
             } catch (\Exception $e) {
                 DB::rollBack();
                 Log::error('Paystack webhook error: ' . $e->getMessage());
