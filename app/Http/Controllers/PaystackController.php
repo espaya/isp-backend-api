@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 // use App\Mail\PaymentReceiptMail;
 use App\Models\Packages;
 use App\Models\Payment;
+use App\Models\Device;
 use App\Models\PaymentAuthorization;
 use App\Models\Subscription;
 use App\Models\User;
@@ -231,11 +232,7 @@ class PaystackController extends Controller
 
             // Try to create Mikrotik user, but don't fail if it doesn't work
             try {
-                $selector = new DeviceSelectorService();
-                $device = $selector->selectBestDevice(
-                    $request->latitude ?? 0,
-                    $request->longitude ?? 0
-                );
+                $device = Device::first();
 
                 if ($device && !empty($device->ip) && !empty($device->api_user) && !empty($device->api_password)) {
                     $mikrotik = new MikrotikService($device);
