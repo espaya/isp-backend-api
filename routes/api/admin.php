@@ -9,6 +9,12 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
+
+
+
+// Route::get('/ping', [DeviceController::class, 'pingDevice']);
+
+
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/admin/dashboard', function () {
         Gate::authorize('view-admin-dashboard');
@@ -37,8 +43,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
     Route::get('/device-performance', [AdminDashboardController::class, 'devicePerformance']);
     Route::get('/system-status', [AdminDashboardController::class, 'systemStatus']);
-
-     Route::get('/ping', [DeviceController::class, 'pingDevice']);
 
     // Packages 
     Route::get('/all-packages', [PackagesController::class, 'index']);
