@@ -17,6 +17,9 @@ Route::get('/paystack/callback', [PaystackController::class, 'callback']);
 Route::post('/paystack/webhook', [PaystackController::class, 'webhook'])->name('paystack.webhook');
 Route::get('/paystack/status/{reference}', [PaystackController::class, 'checkStatus']);
 
+Route::get('/subscriptions/by-reference/{reference}', [SubscriptionController::class, 'showByReference']);
+
+
 Route::middleware(['auth:sanctum', 'user'])->group(function () {
     Route::get('/dashboard', function () {
         Gate::authorize('view-user-dashboard');
@@ -39,7 +42,6 @@ Route::middleware(['auth:sanctum', 'user'])->group(function () {
 
     Route::get('/hotspot-info', [SubscriptionController::class, 'hotspotInfo']);
 
-    Route::get('/subscriptions/by-reference/{reference}', [SubscriptionController::class, 'showByReference']);
 
     // current plan / subscription / package
     Route::get('/user-current-package', [PackagesController::class, 'currentPackage']);
