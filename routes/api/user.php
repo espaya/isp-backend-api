@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\Gate;
 
 Route::get('/paystack/callback', [PaystackController::class, 'callback']);
 
+
+Route::post('/paystack/webhook', [PaystackController::class, 'webhook'])->name('paystack.webhook');
+Route::get('/paystack/status/{reference}', [PaystackController::class, 'checkStatus']);
+
 Route::middleware(['auth:sanctum', 'user'])->group(function () {
     Route::get('/dashboard', function () {
         Gate::authorize('view-user-dashboard');
@@ -24,8 +28,6 @@ Route::middleware(['auth:sanctum', 'user'])->group(function () {
 
     Route::post('/paystack/initialize', [PaystackController::class, 'initialize']);
     Route::get('/paystack/verify/{reference}', [PaystackController::class, 'verify']);
-    Route::post('/paystack/webhook', [PaystackController::class, 'webhook'])->name('paystack.webhook');
-    Route::get('/paystack/status/{reference}', [PaystackController::class, 'checkStatus']);
 
     // Subscription Management
     Route::get('/subscriptions', [SubscriptionController::class, 'subscriptions']);
