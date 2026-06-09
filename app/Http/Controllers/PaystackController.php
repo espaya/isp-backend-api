@@ -285,7 +285,6 @@ class PaystackController extends Controller
         // Verify webhook signature
         $signature = $request->header('x-paystack-signature');
         $payload = $request->getContent();
-
         $computedSignature = hash_hmac('sha512', $payload, config('services.paystack.secret_key'));
 
         if ($signature !== $computedSignature) {
@@ -301,81 +300,102 @@ class PaystackController extends Controller
         if ($event === 'charge.success') {
             $reference = $data['reference'];
 
-            // Update payment
-            $payment = Payment::where('reference', $reference)->first();
-
-            if (!$payment) {
-                Log::error('Paystack webhook: Payment not found', ['reference' => $reference]);
-                return response()->json(['error' => 'Payment not found'], 404);
-            }
-
-            if ($payment->status === 'success') {
-                Log::info('Paystack webhook: Payment already processed', ['reference' => $reference]);
-                return response()->json(['message' => 'Already processed']);
-            }
-
             DB::beginTransaction();
 
             try {
-                // Update payment
-                $payment->status = 'success';
-                $payment->payload = $data;
-                $payment->channel = $data['channel'] ?? null;
-                $payment->gateway_response = $data['gateway_response'] ?? null;
-                $payment->save();
+                // Find the payment
+                $payment = Payment::where('reference', $reference)->first();
 
-                // Get package and user from metadata only (payment has no package_id)
-                $metadata = $data['metadata'] ?? [];
-                $package = Packages::find($metadata['package_id'] ?? null);
-                $user = User::find($metadata['user_id'] ?? $payment->user_id);
-
-                if (!$package || !$user) {
-                    throw new Exception('Package or user not found from metadata');
+                if (!$payment) {
+                    Log::error('Paystack webhook: Payment not found', ['reference' => $reference]);
+                    return response()->json(['error' => 'Payment not found'], 404);
                 }
 
-                // Generate password
-                $password = Str::random(8);
+                // ✅ UPDATE PAYMENT STATUS TO SUCCESS
+                $payment->status = 'success';
+                $payment->method = $data['channel'] ?? 'card';
+                $payment->paid_at = now();
+                $payment->save();
 
-                // Create subscription
-                $startsAt = now();
-                $subscription = Subscription::create([
-                    'user_id' => $user->id,
-                    'package_id' => $package->id,
-                    'payment_id' => $payment->id,
-                    'starts_at' => $startsAt,
-                    'expires_at' => match ($package->type) {
-                        'daily'   => $startsAt->copy()->addDay()->subSecond(),
-                        'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
-                        'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
-                        default   => $startsAt->copy()->addDays(30),
-                    },
-                    'status' => 'active',
-                    'hotspot_password' => $password,
+                Log::info('Payment status updated to success', [
+                    'reference' => $reference,
+                    'status' => $payment->status,
+                    'payment_id' => $payment->id
                 ]);
 
-                // Create MikroTik hotspot user
-                try {
-                    $device = Device::first();
-                    if ($device && !empty($device->ip) && !empty($device->api_user)) {
-                        $mikrotik = new MikrotikService($device);
-                        $mikrotik->createOrUpdateHotspotUser(
-                            username: $user->email,
-                            password: $password,
-                            profile: $package->mikrotik_profile,
-                            expiresAt: $subscription->expires_at
-                        );
-                        $device->increment('current_clients');
+                // Get package and user from metadata (package_id is NOT in payment table)
+                $metadata = $data['metadata'] ?? [];
+                $packageId = $metadata['package_id'] ?? null;
+                $userId = $metadata['user_id'] ?? $payment->user_id;
+
+                if (!$packageId || !$userId) {
+                    throw new Exception('Missing package_id or user_id in metadata');
+                }
+
+                $package = Packages::find($packageId);
+                $user = User::find($userId);
+
+                if (!$package || !$user) {
+                    throw new Exception('Package or user not found');
+                }
+
+                // Check if subscription already exists
+                $existingSubscription = Subscription::where('payment_id', $payment->id)->first();
+
+                if (!$existingSubscription) {
+                    $password = Str::random(8);
+                    $startsAt = now();
+
+                    $subscription = Subscription::create([
+                        'user_id' => $user->id,
+                        'package_id' => $package->id,
+                        'payment_id' => $payment->id,
+                        'starts_at' => $startsAt,
+                        'expires_at' => match ($package->type) {
+                            'daily'   => $startsAt->copy()->addDay()->subSecond(),
+                            'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
+                            'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
+                            default   => $startsAt->copy()->addDays(30),
+                        },
+                        'status' => 'active',
+                        'hotspot_password' => $password,
+                    ]);
+
+                    Log::info('Subscription created', [
+                        'reference' => $reference,
+                        'subscription_id' => $subscription->id,
+                        'password' => $password
+                    ]);
+
+                    // Create MikroTik user (optional)
+                    try {
+                        $device = Device::first();
+                        if ($device && !empty($device->ip) && !empty($device->api_user)) {
+                            $mikrotik = new MikrotikService($device);
+                            $mikrotik->createOrUpdateHotspotUser(
+                                username: $user->email,
+                                password: $password,
+                                profile: $package->mikrotik_profile,
+                                expiresAt: $subscription->expires_at
+                            );
+                            $device->increment('current_clients');
+                            Log::info('MikroTik user created for: ' . $user->email);
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning('MikroTik user creation failed: ' . $e->getMessage());
                     }
-                } catch (\Exception $e) {
-                    Log::warning('MikroTik user creation failed: ' . $e->getMessage());
+                } else {
+                    Log::info('Subscription already exists', ['reference' => $reference]);
                 }
 
                 DB::commit();
-                Log::info('Paystack webhook: Subscription activated', ['reference' => $reference, 'subscription_id' => $subscription->id]);
+                Log::info('Paystack webhook: Successfully processed', ['reference' => $reference]);
+
+                return response()->json(['status' => 'success', 'message' => 'Payment processed']);
             } catch (\Exception $e) {
                 DB::rollBack();
                 Log::error('Paystack webhook error: ' . $e->getMessage());
-                return response()->json(['error' => 'Processing failed'], 500);
+                return response()->json(['error' => 'Processing failed: ' . $e->getMessage()], 500);
             }
         }
 
