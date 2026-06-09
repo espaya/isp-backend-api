@@ -282,6 +282,125 @@ class PaystackController extends Controller
         }
     }
 
+    public function webhook(Request $request)
+    {
+        // Verify webhook signature
+        $signature = $request->header('x-paystack-signature');
+        $payload = $request->getContent();
+
+        $computedSignature = hash_hmac('sha512', $payload, config('services.paystack.secret_key'));
+
+        if ($signature !== $computedSignature) {
+            Log::error('Paystack webhook: Invalid signature');
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+
+        $event = $request->input('event');
+        $data = $request->input('data');
+
+        Log::info('Paystack webhook received', ['event' => $event, 'reference' => $data['reference'] ?? null]);
+
+        if ($event === 'charge.success') {
+            $reference = $data['reference'];
+
+            // Update payment
+            $payment = Payment::where('reference', $reference)->first();
+
+            if (!$payment) {
+                Log::error('Paystack webhook: Payment not found', ['reference' => $reference]);
+                return response()->json(['error' => 'Payment not found'], 404);
+            }
+
+            if ($payment->status === 'success') {
+                Log::info('Paystack webhook: Payment already processed', ['reference' => $reference]);
+                return response()->json(['message' => 'Already processed']);
+            }
+
+            DB::beginTransaction();
+
+            try {
+                // Update payment
+                $payment->status = 'success';
+                $payment->payload = $data;
+                $payment->channel = $data['channel'] ?? null;
+                $payment->gateway_response = $data['gateway_response'] ?? null;
+                $payment->save();
+
+                // Get package and user
+                $metadata = $data['metadata'] ?? [];
+                $package = Packages::find($metadata['package_id'] ?? $payment->package_id);
+                $user = User::find($metadata['user_id'] ?? $payment->user_id);
+
+                if (!$package || !$user) {
+                    throw new Exception('Package or user not found');
+                }
+
+                // Generate password
+                $password = Str::random(8);
+
+                // Create subscription
+                $startsAt = now();
+                $subscription = Subscription::create([
+                    'user_id' => $user->id,
+                    'package_id' => $package->id,
+                    'payment_id' => $payment->id,
+                    'starts_at' => $startsAt,
+                    'expires_at' => match ($package->type) {
+                        'daily'   => $startsAt->copy()->addDay()->subSecond(),
+                        'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
+                        'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
+                        default   => $startsAt->copy()->addDays(30),
+                    },
+                    'status' => 'active',
+                    'hotspot_password' => $password,
+                ]);
+
+                // Create MikroTik hotspot user
+                try {
+                    $device = Device::first();
+                    if ($device && !empty($device->ip) && !empty($device->api_user)) {
+                        $mikrotik = new MikrotikService($device);
+                        $mikrotik->createOrUpdateHotspotUser(
+                            username: $user->email,
+                            password: $password,
+                            profile: $package->mikrotik_profile,
+                            expiresAt: $subscription->expires_at
+                        );
+                        $device->increment('current_clients');
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('MikroTik user creation failed: ' . $e->getMessage());
+                }
+
+                DB::commit();
+                Log::info('Paystack webhook: Subscription activated', ['reference' => $reference]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::error('Paystack webhook error: ' . $e->getMessage());
+                return response()->json(['error' => 'Processing failed'], 500);
+            }
+        }
+
+        return response()->json(['status' => 'success']);
+    }
+
+    public function checkStatus($reference)
+    {
+        $payment = Payment::where('reference', $reference)->first();
+
+        if (!$payment) {
+            return response()->json(['status' => 'not_found'], 404);
+        }
+
+        $subscription = Subscription::where('payment_id', $payment->id)->first();
+
+        return response()->json([
+            'payment_status' => $payment->status,
+            'subscription_status' => $subscription->status ?? null,
+            'is_active' => $payment->status === 'success'
+        ]);
+    }
+
     public function callback(Request $request)
     {
         // Get reference from query params
