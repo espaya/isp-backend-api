@@ -323,29 +323,31 @@ class DeviceController extends Controller
             return false;
         }
 
-        // If monitoring is disabled, assume online (user chose not to monitor)
+        // If monitoring is disabled, assume online
         if (!$device->monitorEnabled) {
             Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
             return true;
         }
 
-        Log::info("isOnline: Attempting to check {$ip} from device {$device->id}");
+        Log::info("isOnline: Attempting to check {$ip} for device {$device->id}");
 
         try {
-            // For client devices, we need a MikroTik gateway to ping through
-            // Just get the first device (only one MikroTik is being used)
-            $mikrotikDevice = \App\Models\Device::first();
+            // Get the MikroTik gateway device (the one that can ping local IPs)
+            $mikrotikDevice = \App\Models\Device::where('ip', '10.0.0.2')->first();
 
             if (!$mikrotikDevice) {
-                Log::warning("isOnline: No MikroTik device found");
+                Log::warning("isOnline: No MikroTik gateway found");
                 return false;
             }
 
+            // For client devices, ping through the MikroTik gateway
             $mikrotik = new \App\Services\MikrotikService($mikrotikDevice);
+
+            // IMPORTANT: Ping the actual client IP, not the gateway IP
             $result = $mikrotik->ping($ip, 2);
             $isOnline = isset($result['received']) && $result['received'] > 0;
 
-            Log::info("isOnline: Device {$device->id} is " . ($isOnline ? "ONLINE" : "OFFLINE"));
+            Log::info("isOnline: Device {$device->id} ({$ip}) is " . ($isOnline ? "ONLINE" : "OFFLINE"));
 
             $device->status = $isOnline ? 'online' : 'offline';
             $device->save();
