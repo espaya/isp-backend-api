@@ -462,7 +462,7 @@ class DeviceController extends Controller
     {
 
         try {
-            $this->isOnline(new Device(), "10.0.0.2");
+            $this->isOnline(Device::first(), "10.0.0.2");
             // $deviceId = $request->input('device_id', 1);
             // $device = Device::find($deviceId);
 
