@@ -17,7 +17,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use \Illuminate\Support\Str;
-use App\Services\DeviceSelectorService;
 use Illuminate\Support\Facades\Mail;
 
 class PaystackController extends Controller

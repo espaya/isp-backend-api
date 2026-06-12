@@ -314,7 +314,7 @@ class DeviceController extends Controller
         ]);
     }
 
-    private function isOnline(object $device, $ip = null): bool
+    private function isOnline(object $device, $ip = null)
     {
         $ip = $ip ?? $device->ip;
 
@@ -328,7 +328,7 @@ class DeviceController extends Controller
 
             $result = $mikrotik->ping($ip, 2);
 
-            return !empty($result['success']);
+            return $result;
         } catch (\Throwable $e) {
 
             Log::error('isOnline check failed', [
