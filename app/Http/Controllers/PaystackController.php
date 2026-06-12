@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use \Illuminate\Support\Str;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 
 class PaystackController extends Controller
@@ -69,9 +69,9 @@ class PaystackController extends Controller
         try {
             $package = Packages::findOrFail($request->package_id);
             $reference = 'ISP_' . uniqid();
-            $amount = $package->price * 100; // Paystack expects amount in kobo
+            $amount = $package->price * 100;
 
-            // Create a pending payment record (package_id removed)
+            // Create a pending payment record
             Payment::create([
                 'user_id' => Auth::id(),
                 'reference' => $reference,
@@ -88,7 +88,7 @@ class PaystackController extends Controller
                 'amount' => $amount,
                 'reference' => $reference,
                 'channels' => $channels,
-                'callback_url' => config('app.frontend_url') . '/dashboard/payment/success',
+                'callback_url' => config('app.frontend_url') . '/api/paystack/callback',
                 'metadata' => [
                     'user_id' => Auth::id(),
                     'package_id' => $package->id,
@@ -131,7 +131,6 @@ class PaystackController extends Controller
                 ->get(config('services.paystack.base_url') . "/transaction/verify/{$reference}");
 
             Log::info('Paystack verification response status: ' . $response->status());
-            Log::info('Paystack full response: ' . $response->body());
 
             if (!$response->ok()) {
                 DB::rollBack();
@@ -141,10 +140,6 @@ class PaystackController extends Controller
 
             $data = $response->json()['data'] ?? null;
 
-            // Log the actual status from Paystack
-            Log::info('Paystack transaction status: ' . ($data['status'] ?? 'unknown'));
-
-            // ⚠️ IMPORTANT: Check if status is 'success' (not 'pending' or 'abandoned')
             if (!$data || $data['status'] !== 'success') {
                 DB::rollBack();
                 Log::error('Payment not successful for reference: ' . $reference, [
@@ -152,7 +147,6 @@ class PaystackController extends Controller
                     'gateway_response' => $data['gateway_response'] ?? 'null'
                 ]);
 
-                // Update payment status to match Paystack
                 Payment::where('reference', $reference)->update([
                     'status' => $data['status'] ?? 'failed',
                     'gateway_response' => $data['gateway_response'] ?? null,
@@ -196,6 +190,7 @@ class PaystackController extends Controller
             $package = Packages::findOrFail($packageId);
             $user = User::findOrFail($userId);
 
+            // ✅ Update payment to success
             $payment->update([
                 'status' => 'success',
                 'payload' => $data,
@@ -203,7 +198,7 @@ class PaystackController extends Controller
                 'gateway_response' => $data['gateway_response'] ?? null,
             ]);
 
-            // Force payment status to success
+            // ✅ Force save again to ensure status is updated
             $payment->status = 'success';
             $payment->paid_at = now();
             $payment->save();
@@ -232,7 +227,7 @@ class PaystackController extends Controller
 
             Log::info('Subscription created for reference: ' . $reference . ', ID: ' . $subscription->id);
 
-            // Try to create Mikrotik user, but don't fail if it doesn't work
+            // Try to create Mikrotik user
             try {
                 $device = Device::first();
 
@@ -272,8 +267,6 @@ class PaystackController extends Controller
             DB::commit();
             Log::info('Payment verified and subscription activated for reference: ' . $reference);
 
-
-
             return response()->json([
                 'message' => 'Payment verified and subscription activated',
                 'subscription' => $subscription,
@@ -309,7 +302,6 @@ class PaystackController extends Controller
             DB::beginTransaction();
 
             try {
-                // Find the payment
                 $payment = Payment::where('reference', $reference)->first();
 
                 if (!$payment) {
@@ -317,7 +309,7 @@ class PaystackController extends Controller
                     return response()->json(['error' => 'Payment not found'], 404);
                 }
 
-                // ✅ UPDATE PAYMENT STATUS TO SUCCESS
+                // ✅ Update payment status
                 $payment->status = 'success';
                 $payment->method = $data['channel'] ?? 'card';
                 $payment->paid_at = now();
@@ -329,7 +321,6 @@ class PaystackController extends Controller
                     'payment_id' => $payment->id
                 ]);
 
-                // Get package and user from metadata (package_id is NOT in payment table)
                 $metadata = $data['metadata'] ?? [];
                 $packageId = $metadata['package_id'] ?? null;
                 $userId = $metadata['user_id'] ?? $payment->user_id;
@@ -345,7 +336,6 @@ class PaystackController extends Controller
                     throw new Exception('Package or user not found');
                 }
 
-                // Check if subscription already exists
                 $existingSubscription = Subscription::where('payment_id', $payment->id)->first();
 
                 if (!$existingSubscription) {
@@ -370,10 +360,9 @@ class PaystackController extends Controller
                     Log::info('Subscription created', [
                         'reference' => $reference,
                         'subscription_id' => $subscription->id,
-                        'password' => $password
                     ]);
 
-                    // Create MikroTik user (optional)
+                    // Create MikroTik user
                     try {
                         $device = Device::first();
                         if ($device && !empty($device->ip) && !empty($device->api_user)) {
@@ -442,29 +431,23 @@ class PaystackController extends Controller
 
         Log::info('Paystack callback received', ['reference' => $referenceString]);
 
-        // ✅ Call verify and get the response
+        // ✅ Call verify
         $verifyResponse = $this->verify($request, $referenceString);
-
-        $verifyData = $verifyResponse->getData();
-
-        Log::info('Verify response', [
-            'status_code' => $verifyResponse->getStatusCode(),
-            'data' => $verifyData
-        ]);
 
         // ✅ Check if verification was successful
         if ($verifyResponse->getStatusCode() !== 200) {
+            Log::error('Verification failed in callback', ['reference' => $referenceString]);
             return redirect(config('app.frontend_url') . '/dashboard/payments?error=verification_failed');
         }
 
-        // ✅ Update payment status manually if verify didn't
+        // ✅ Ensure payment status is success
         $payment = Payment::where('reference', $referenceString)->first();
         if ($payment && $payment->status !== 'success') {
             $payment->status = 'success';
             $payment->method = 'paystack';
             $payment->paid_at = now();
             $payment->save();
-            Log::info('Payment status manually updated', ['reference' => $referenceString]);
+            Log::info('Payment status manually updated in callback', ['reference' => $referenceString]);
         }
 
         // ✅ Redirect to success page
