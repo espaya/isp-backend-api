@@ -307,32 +307,24 @@ class DeviceController extends Controller
             return true;
         }
 
-        Log::info("isOnline: Attempting to ping {$ip} from device {$device->id}");
+        Log::info("isOnline: Attempting to check {$ip} from device {$device->id}");
 
         try {
-            $mikrotik = new \App\Services\MikrotikService($device);
-            Log::info("isOnline: MikrotikService created successfully");
+            // For client devices, we need a MikroTik gateway to ping through
+            // Just get the first device (only one MikroTik is being used)
+            $mikrotikDevice = \App\Models\Device::first();
 
-            $startTime = microtime(true);
+            if (!$mikrotikDevice) {
+                Log::warning("isOnline: No MikroTik device found");
+                return false;
+            }
+
+            $mikrotik = new \App\Services\MikrotikService($mikrotikDevice);
             $result = $mikrotik->ping($ip, 2);
-            $endTime = microtime(true);
-            $duration = round(($endTime - $startTime) * 1000, 2);
-
-            Log::info("isOnline: Ping completed in {$duration}ms", [
-                'ip' => $ip,
-                'sent' => $result['sent'],
-                'received' => $result['received'],
-                'loss' => $result['loss']
-            ]);
-
             $isOnline = isset($result['received']) && $result['received'] > 0;
 
-            Log::info("isOnline: Device {$device->id} is " . ($isOnline ? "ONLINE" : "OFFLINE"), [
-                'received' => $result['received'] ?? 0,
-                'sent' => $result['sent'] ?? 0
-            ]);
+            Log::info("isOnline: Device {$device->id} is " . ($isOnline ? "ONLINE" : "OFFLINE"));
 
-            // Update device status in database
             $device->status = $isOnline ? 'online' : 'offline';
             $device->save();
 
@@ -340,16 +332,13 @@ class DeviceController extends Controller
         } catch (\Exception $e) {
             Log::error("isOnline: API check failed for device {$device->id}", [
                 'ip' => $ip,
-                'error' => $e->getMessage(),
-                'line' => $e->getLine(),
-                'file' => basename($e->getFile())
+                'error' => $e->getMessage()
             ]);
 
-            // ✅ FIXED: If API fails, mark as OFFLINE (not online)
             $device->status = 'offline';
             $device->save();
 
-            return false;  // Changed from 'return true' to 'return false'
+            return false;
         }
     }
 

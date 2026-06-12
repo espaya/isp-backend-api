@@ -260,38 +260,50 @@ class MikrotikService
             $query->equal('address', $ip);
             $query->equal('count', $count);
             $query->equal('interval', '100ms');
+            $query->equal('timeout', '2s'); // Add timeout
 
             $response = $this->client->query($query)->read();
 
-            $result = ['sent' => 0, 'received' => 0, 'loss' => 100];
+            $result = ['sent' => 0, 'received' => 0, 'loss' => 100, 'success' => false];
 
-            // Parse RouterOS ping output format
+            // Look for the summary line at the end
+            $lastLine = '';
             foreach ($response as $line) {
-                // Convert to string if array
                 $lineStr = is_array($line) ? implode(' ', $line) : (string)$line;
+                $lastLine = $lineStr;
 
-                // RouterOS format: "0 10.0.0.2 56 64 359us 1 1 0 ..."
-                // Fields: seq host size ttl time sent received loss
-                $parts = preg_split('/\s+/', trim($lineStr));
+                // Try to find sent/received in the line
+                if (preg_match('/sent=(\d+) received=(\d+)/', $lineStr, $matches)) {
+                    $result['sent'] = (int)$matches[1];
+                    $result['received'] = (int)$matches[2];
+                    $result['loss'] = $result['sent'] > 0
+                        ? round((($result['sent'] - $result['received']) / $result['sent']) * 100, 2)
+                        : 100;
+                    $result['success'] = $result['received'] > 0;
+                    break;
+                }
 
-                if (count($parts) >= 7) {
-                    // sent is at index 5 (6th field)
-                    // received is at index 6 (7th field)
-                    $sent = (int)$parts[5];
-                    $received = (int)$parts[6];
-
-                    if ($sent > 0) {
-                        $result['sent'] = $sent;
-                        $result['received'] = $received;
-                        $result['loss'] = round((($sent - $received) / $sent) * 100, 2);
-                    }
+                // Alternative format: check if we got a successful ping response
+                if (
+                    strpos($lineStr, '64 bytes from') !== false ||
+                    strpos($lineStr, 'time=') !== false ||
+                    (preg_match('/\d+\s+[\d\.]+\s+\d+\s+\d+\s+[\d\.]+ms\s+\d+\s+\d+/', $lineStr))
+                ) {
+                    $result['received']++;
+                    $result['sent'] = $count;
                 }
             }
+
+            // If we have received packets, it's successful
+            $result['success'] = $result['received'] > 0;
+            $result['loss'] = $result['sent'] > 0
+                ? round((($result['sent'] - $result['received']) / $result['sent']) * 100, 2)
+                : 100;
 
             return $result;
         } catch (\Exception $e) {
             Log::error("MikroTik ping failed for {$ip}: " . $e->getMessage());
-            return ['sent' => 0, 'received' => 0, 'loss' => 100];
+            return ['sent' => 0, 'received' => 0, 'loss' => 100, 'success' => false];
         }
     }
 }
