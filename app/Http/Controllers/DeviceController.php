@@ -324,10 +324,10 @@ class DeviceController extends Controller
         }
 
         // If monitoring is disabled, assume online
-        if (!$device->monitorEnabled) {
-            Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
-            return true;
-        }
+        // if (!$device->monitorEnabled) {
+        //     Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
+        //     return true;
+        // }
 
         Log::info("isOnline: Attempting to check {$ip} for device {$device->id}");
 
