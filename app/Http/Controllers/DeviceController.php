@@ -319,49 +319,21 @@ class DeviceController extends Controller
         $ip = $ip ?? $device->ip;
 
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            Log::info("isOnline: Invalid IP address {$ip}");
             return false;
         }
 
-        // If monitoring is disabled, assume online
         // if (!$device->monitorEnabled) {
-        //     Log::info("isOnline: Monitoring disabled for device {$device->id}, assuming online");
         //     return true;
         // }
 
-        Log::info("isOnline: Attempting to check {$ip} for device {$device->id}");
-
         try {
-            // Get the MikroTik gateway device (the one that can ping local IPs)
-            $mikrotikDevice = \App\Models\Device::where('ip', '10.0.0.2')->first();
-
-            if (!$mikrotikDevice) {
-                Log::warning("isOnline: No MikroTik gateway found");
-                return false;
-            }
-
-            // For client devices, ping through the MikroTik gateway
-            $mikrotik = new \App\Services\MikrotikService($mikrotikDevice);
-
-            // IMPORTANT: Ping the actual client IP, not the gateway IP
+            // Use the device itself to ping (it's the MikroTik)
+            $mikrotik = new \App\Services\MikrotikService($device);
             $result = $mikrotik->ping($ip, 2);
-            $isOnline = isset($result['received']) && $result['received'] > 0;
 
-            Log::info("isOnline: Device {$device->id} ({$ip}) is " . ($isOnline ? "ONLINE" : "OFFLINE"));
-
-            $device->status = $isOnline ? 'online' : 'offline';
-            $device->save();
-
-            return $isOnline;
+            return ($result['received'] ?? 0) > 0;
         } catch (\Exception $e) {
-            Log::error("isOnline: API check failed for device {$device->id}", [
-                'ip' => $ip,
-                'error' => $e->getMessage()
-            ]);
-
-            $device->status = 'offline';
-            $device->save();
-
+            Log::error("isOnline check failed: " . $e->getMessage());
             return false;
         }
     }
