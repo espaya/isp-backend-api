@@ -177,31 +177,15 @@ class PaystackController extends Controller
                 return response()->json(['message' => 'Payment already verified'], 200);
             }
 
-            $payment = Payment::firstOrCreate(
-                ['reference' => $reference],
-                [
-                    'user_id' => $userId,
-                    'package_id' => $packageId,
-                    'amount' => $data['amount'],
-                    'status' => 'pending'
-                ]
-            );
+            $payment = Payment::where('reference', $reference)->first();
+
+            $payment->status = 'success';
+            $payment->method = $data['channel'] ?? 'paystack';
+            $payment->paid_at = now();
+            $payment->save();
 
             $package = Packages::findOrFail($packageId);
             $user = User::findOrFail($userId);
-
-            // ✅ Update payment to success
-            $payment->update([
-                'status' => 'success',
-                'payload' => $data,
-                'channel' => $data['channel'] ?? null,
-                'gateway_response' => $data['gateway_response'] ?? null,
-            ]);
-
-            // ✅ Force save again to ensure status is updated
-            $payment->status = 'success';
-            $payment->paid_at = now();
-            $payment->save();
 
             Log::info('Payment updated to success for reference: ' . $reference);
 
@@ -210,20 +194,23 @@ class PaystackController extends Controller
             // 3️⃣ Create subscription
             $startsAt = now();
 
-            $subscription = Subscription::create([
-                'user_id' => $user->id,
-                'package_id' => $package->id,
-                'payment_id' => $payment->id,
-                'starts_at' => $startsAt,
-                'expires_at' => match ($package->type) {
-                    'daily'   => $startsAt->copy()->addDay()->subSecond(),
-                    'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
-                    'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
-                    default   => throw new Exception('Invalid package type'),
-                },
-                'status' => 'active',
-                'hotspot_password' => $password,
-            ]);
+            $subscription = Subscription::where('payment_id', $payment->id)->first();
+            if (!$subscription) {
+                $subscription = Subscription::create([
+                    'user_id' => $user->id,
+                    'package_id' => $package->id,
+                    'payment_id' => $payment->id,
+                    'starts_at' => $startsAt,
+                    'expires_at' => match ($package->type) {
+                        'daily'   => $startsAt->copy()->addDay()->subSecond(),
+                        'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
+                        'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
+                        default   => throw new Exception('Invalid package type'),
+                    },
+                    'status' => 'active',
+                    'hotspot_password' => $password,
+                ]);
+            }
 
             Log::info('Subscription created for reference: ' . $reference . ', ID: ' . $subscription->id);
 
