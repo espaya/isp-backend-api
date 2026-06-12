@@ -14,9 +14,9 @@ class MikrotikService
 
     public function __construct(Device $device)
     {
-        $this->device = $device;
+        $deviceId = Device::first();
 
-        $this->client = RouterOSPool::get($device->id, [
+        $this->client = RouterOSPool::get($deviceId, [
             'host'     => (string)$device->ip ?? "10.0.0.2",
             'api_user' => (string)$device->api_user ?? "admin",
             'api_password' => (string)$device->api_password ?? "NanaS",
