@@ -462,7 +462,11 @@ class DeviceController extends Controller
     {
 
         try {
-            $this->isOnline(Device::first(), "10.0.0.2");
+            $status = $this->isOnline(Device::first(), "10.0.0.2");
+            return response()->json([
+                'success' => $status,
+                'message' => $status ? 'Device is online' : 'Device is offline',
+            ]);
             // $deviceId = $request->input('device_id', 1);
             // $device = Device::find($deviceId);
 
