@@ -16,7 +16,7 @@ class MikrotikService
     {
         $deviceId = Device::first();
 
-        $this->client = RouterOSPool::get((int)$deviceId->id, [
+        $this->client = RouterOSPool::get((int)$deviceId->id ?? 12, [
             'host'     => (string)$device->ip ?? "10.0.0.2",
             'api_user' => (string)$device->api_user ?? "admin",
             'api_password' => (string)$device->api_password ?? "NanaS",
