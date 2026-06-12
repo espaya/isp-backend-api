@@ -314,7 +314,7 @@ class DeviceController extends Controller
         ]);
     }
 
-    private function isOnline(object $device, $ip = null)
+    private function isOnline(object $device, $ip = null): bool
     {
         $ip = $ip ?? $device->ip;
 
@@ -322,18 +322,21 @@ class DeviceController extends Controller
             return false;
         }
 
-        // if (!$device->monitorEnabled) {
-        //     return true;
-        // }
-
         try {
-            // Use the device itself to ping (it's the MikroTik)
+
             $mikrotik = new \App\Services\MikrotikService($device);
+
             $result = $mikrotik->ping($ip, 2);
 
-            return ($result['received'] ?? 0) > 0;
-        } catch (\Exception $e) {
-            Log::error("isOnline check failed: " . $e->getMessage());
+            return !empty($result['success']);
+        } catch (\Throwable $e) {
+
+            Log::error('isOnline check failed', [
+                'device_id' => $device->id ?? null,
+                'ip' => $ip,
+                'message' => $e->getMessage(),
+            ]);
+
             return false;
         }
     }
