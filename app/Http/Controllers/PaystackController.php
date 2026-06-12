@@ -203,6 +203,11 @@ class PaystackController extends Controller
                 'gateway_response' => $data['gateway_response'] ?? null,
             ]);
 
+            // Force payment status to success
+            $payment->status = 'success';
+            $payment->paid_at = now();
+            $payment->save();
+
             Log::info('Payment updated to success for reference: ' . $reference);
 
             $password = Str::random(8);
@@ -266,6 +271,8 @@ class PaystackController extends Controller
 
             DB::commit();
             Log::info('Payment verified and subscription activated for reference: ' . $reference);
+
+
 
             return response()->json([
                 'message' => 'Payment verified and subscription activated',
@@ -423,7 +430,6 @@ class PaystackController extends Controller
         // Get reference from query params
         $reference = $request->query('reference');
 
-        // If reference is empty, try trxref (Paystack sometimes uses this)
         if (!$reference) {
             $reference = $request->query('trxref');
         }
@@ -432,38 +438,33 @@ class PaystackController extends Controller
             abort(400, 'Reference missing');
         }
 
-        // Ensure reference is a string (not an object or array)
-        if (is_object($reference)) {
-            $reference = $reference->reference ?? $reference->id ?? (string) $reference;
-        }
-
-        if (is_array($reference)) {
-            $reference = $reference['reference'] ?? $reference['id'] ?? (string) $reference;
-        }
-
-        // Cast to string to prevent [object Object]
         $referenceString = (string) $reference;
 
-        // Validate it's not an empty string or [object Object]
-        if (empty($referenceString) || $referenceString === '[object Object]') {
-            Log::error('Invalid reference after conversion', [
-                'original' => $reference,
-                'converted' => $referenceString
-            ]);
-            return redirect(config('app.frontend_url') . '/dashboard/payments?error=invalid_reference');
-        }
+        Log::info('Paystack callback received', ['reference' => $referenceString]);
 
         // ✅ Call verify and get the response
-        $response = $this->verify($request, $referenceString);
+        $verifyResponse = $this->verify($request, $referenceString);
 
-        // ✅ Check if verification was successful (status code 200)
-        if ($response->getStatusCode() !== 200) {
-            $responseData = $response->getData();
-            Log::error('Verification failed for reference: ' . $referenceString, [
-                'status_code' => $response->getStatusCode(),
-                'response' => $responseData
-            ]);
+        $verifyData = $verifyResponse->getData();
+
+        Log::info('Verify response', [
+            'status_code' => $verifyResponse->getStatusCode(),
+            'data' => $verifyData
+        ]);
+
+        // ✅ Check if verification was successful
+        if ($verifyResponse->getStatusCode() !== 200) {
             return redirect(config('app.frontend_url') . '/dashboard/payments?error=verification_failed');
+        }
+
+        // ✅ Update payment status manually if verify didn't
+        $payment = Payment::where('reference', $referenceString)->first();
+        if ($payment && $payment->status !== 'success') {
+            $payment->status = 'success';
+            $payment->method = 'paystack';
+            $payment->paid_at = now();
+            $payment->save();
+            Log::info('Payment status manually updated', ['reference' => $referenceString]);
         }
 
         // ✅ Redirect to success page
