@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Gate;
 
 
 
-// Route::get('/ping', [DeviceController::class, 'pingDevice']);
+Route::get('/ping', [DeviceController::class, 'pingDevice']);
 
 
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
