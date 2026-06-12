@@ -460,47 +460,49 @@ class DeviceController extends Controller
 
     public function pingDevice(Request $request)
     {
+
         try {
-            $deviceId = $request->input('device_id', 1);
-            $device = Device::find($deviceId);
+            $this->isOnline(new Device(), "10.0.0.2");
+            // $deviceId = $request->input('device_id', 1);
+            // $device = Device::find($deviceId);
 
-            if (!$device) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Device not found'
-                ], 404);
-            }
+            // if (!$device) {
+            //     return response()->json([
+            //         'success' => false,
+            //         'message' => 'Device not found'
+            //     ], 404);
+            // }
 
-            // Test connection to MikroTik
-            $startTime = microtime(true);
+            // // Test connection to MikroTik
+            // $startTime = microtime(true);
 
-            try {
-                $mikrotik = new \App\Services\MikrotikService($device);
-                $result = $mikrotik->ping($device->ip, 2);
-                $responseTime = round((microtime(true) - $startTime) * 1000, 2);
+            // try {
+            //     $mikrotik = new \App\Services\MikrotikService($device);
+            //     $result = $mikrotik->ping($device->ip, 2);
+            //     $responseTime = round((microtime(true) - $startTime) * 1000, 2);
 
-                $isOnline = isset($result['received']) && $result['received'] > 0;
+            //     $isOnline = isset($result['received']) && $result['received'] > 0;
 
-                // Update device status
-                $device->status = $isOnline ? 'online' : 'offline';
-                $device->save();
+            //     // Update device status
+            //     $device->status = $isOnline ? 'online' : 'offline';
+            //     $device->save();
 
-                return response()->json([
-                    'success' => $isOnline,
-                    'status' => $isOnline ? 'online' : 'offline',
-                    'message' => $isOnline ? 'Device is online' : 'Device is offline',
-                    'response_time' => $responseTime . 'ms',
-                    'ping_result' => $result
-                ]);
-            } catch (\Exception $e) {
-                // Don't log here - just return error
-                return response()->json([
-                    'success' => false,
-                    'status' => 'offline',
-                    'message' => 'Connection failed: Unable to reach device',
-                    'error' => $e->getMessage()
-                ], 500);
-            }
+            //     return response()->json([
+            //         'success' => $isOnline,
+            //         'status' => $isOnline ? 'online' : 'offline',
+            //         'message' => $isOnline ? 'Device is online' : 'Device is offline',
+            //         'response_time' => $responseTime . 'ms',
+            //         'ping_result' => $result
+            //     ]);
+            // } catch (\Exception $e) {
+            //     // Don't log here - just return error
+            //     return response()->json([
+            //         'success' => false,
+            //         'status' => 'offline',
+            //         'message' => 'Connection failed: Unable to reach device',
+            //         'error' => $e->getMessage()
+            //     ], 500);
+            // }
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
