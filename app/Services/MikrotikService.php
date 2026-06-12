@@ -253,57 +253,74 @@ class MikrotikService
     /**
      * Ping an IP address from the MikroTik router
      */
-    public function ping(string $ip, int $count = 2)
+    /**
+     * Ping an IP address from the MikroTik router
+     */
+    public function ping(string $ip, int $count = 2): array
     {
         try {
             $query = new \RouterOS\Query('/ping');
             $query->equal('address', $ip);
             $query->equal('count', $count);
-            $query->equal('interval', '100ms');
-            $query->equal('timeout', '2s'); // Add timeout
 
             $response = $this->client->query($query)->read();
 
-            $result = ['sent' => 0, 'received' => 0, 'loss' => 100, 'success' => false];
+            $sent = $count;
+            $received = 0;
 
-            // Look for the summary line at the end
-            $lastLine = '';
-            foreach ($response as $line) {
-                $lineStr = is_array($line) ? implode(' ', $line) : (string)$line;
-                $lastLine = $lineStr;
+            foreach ($response as $row) {
 
-                // Try to find sent/received in the line
-                if (preg_match('/sent=(\d+) received=(\d+)/', $lineStr, $matches)) {
-                    $result['sent'] = (int)$matches[1];
-                    $result['received'] = (int)$matches[2];
-                    $result['loss'] = $result['sent'] > 0
-                        ? round((($result['sent'] - $result['received']) / $result['sent']) * 100, 2)
-                        : 100;
-                    $result['success'] = $result['received'] > 0;
-                    break;
+                if (!is_array($row)) {
+                    continue;
                 }
 
-                // Alternative format: check if we got a successful ping response
+                // RouterOS 7 summary response
+                if (isset($row['sent']) && isset($row['received'])) {
+
+                    $sent = (int) $row['sent'];
+                    $received = (int) $row['received'];
+
+                    return [
+                        'sent' => $sent,
+                        'received' => $received,
+                        'loss' => $sent > 0
+                            ? round((($sent - $received) / $sent) * 100, 2)
+                            : 100,
+                        'success' => $received > 0,
+                    ];
+                }
+
+                // Individual successful ping result
                 if (
-                    strpos($lineStr, '64 bytes from') !== false ||
-                    strpos($lineStr, 'time=') !== false ||
-                    (preg_match('/\d+\s+[\d\.]+\s+\d+\s+\d+\s+[\d\.]+ms\s+\d+\s+\d+/', $lineStr))
+                    isset($row['time']) ||
+                    isset($row['host']) ||
+                    (isset($row['status']) && $row['status'] === '')
                 ) {
-                    $result['received']++;
-                    $result['sent'] = $count;
+                    $received++;
                 }
             }
 
-            // If we have received packets, it's successful
-            $result['success'] = $result['received'] > 0;
-            $result['loss'] = $result['sent'] > 0
-                ? round((($result['sent'] - $result['received']) / $result['sent']) * 100, 2)
-                : 100;
+            return [
+                'sent' => $sent,
+                'received' => $received,
+                'loss' => $sent > 0
+                    ? round((($sent - $received) / $sent) * 100, 2)
+                    : 100,
+                'success' => $received > 0,
+            ];
+        } catch (\Throwable $e) {
 
-            return $result;
-        } catch (\Exception $e) {
-            Log::error("MikroTik ping failed for {$ip}: " . $e->getMessage());
-            return ['sent' => 0, 'received' => 0, 'loss' => 100, 'success' => false];
+            Log::error('MikroTik ping failed', [
+                'ip' => $ip,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [
+                'sent' => 0,
+                'received' => 0,
+                'loss' => 100,
+                'success' => false,
+            ];
         }
     }
 }
