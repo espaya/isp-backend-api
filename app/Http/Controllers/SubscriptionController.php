@@ -300,8 +300,7 @@ class SubscriptionController extends Controller
             }
 
             // Get the subscription for the logged-in user
-            $subscription = Subscription::with('mikrotikDevice') // eager load device
-                ->where('payment_id', $payment_id)
+            $subscription = Subscription::where('payment_id', $payment_id)
                 ->where('user_id', Auth::id())
                 ->first();
 
@@ -310,7 +309,7 @@ class SubscriptionController extends Controller
             }
 
             // Safely get device name if it exists
-            $deviceName = $subscription->mikrotikDevice?->name ?? null;
+            $deviceName = ""; #$subscription->mikrotikDevice?->name ?? null;
 
             return response()->json([
                 'device' => $deviceName,
