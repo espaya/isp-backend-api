@@ -215,101 +215,46 @@ class DeviceController extends Controller
             return response()->json(['message' => 'Device not found'], 404);
         }
 
-        // Check if device is online (ping)
-        $isOnline = $this->isOnline($device, $device->ip);
+        // ✅ Use the working ping method to check status
+        $mikrotik = new MikrotikService($device);
+        $pingResult = $mikrotik->ping($device->ip, 2);
 
-        // If device is offline, return immediately
+        $isOnline = $pingResult['success'] ?? false;
+
         if (!$isOnline) {
             return response()->json([
                 'status' => 'offline',
                 'cpu' => 0,
                 'memory' => 0,
                 'clients' => 0,
-                'bandwidth' => [
-                    'upload' => 0,
-                    'download' => 0,
-                ],
+                'bandwidth' => ['upload' => 0, 'download' => 0],
                 'uptime' => '-',
-                'message' => 'Device is offline',
+                'message' => 'Device is offline'
             ]);
         }
 
-        // Check if SNMP extension is loaded
-        if (!function_exists('snmp2_get')) {
-            return response()->json([
-                'status' => 'online',
-                'cpu' => 0,
-                'memory' => 0,
-                'clients' => 0,
-                'bandwidth' => [
-                    'upload' => 0,
-                    'download' => 0,
-                ],
-                'uptime' => '-',
-                'message' => 'SNMP PHP extension not enabled',
-            ], 500);
-        }
+        // Device is online - try to get SNMP stats (optional)
+        $cpu = 0;
+        $memory = 0;
+        $clients = 0;
+        $uptime = '-';
 
-        // Helper to safely fetch SNMP values
-        $snmpFetch = function ($oid) use ($device) {
+        if (function_exists('snmp2_get')) {
             try {
-                $val = @snmp2_get($device->ip, $device->snmpCommunity, $oid);
-                if ($val === false) return 0;
-                // Remove quotes and text if present
-                return intval(preg_replace('/[^0-9]/', '', $val));
+                $cpu = intval(@snmp2_get($device->ip, $device->snmpCommunity, '1.3.6.1.4.1.14988.1.1.3.10.0') ?: 0);
+                $memory = intval(@snmp2_get($device->ip, $device->snmpCommunity, '1.3.6.1.4.1.14988.1.1.3.11.0') ?: 0);
+                $clients = intval(@snmp2_get($device->ip, $device->snmpCommunity, '1.3.6.1.4.1.14988.1.1.3.12.0') ?: 0);
             } catch (\Exception $e) {
-                return 0;
+                Log::warning("SNMP fetch failed for device {$id}: " . $e->getMessage());
             }
-        };
-
-        // SNMP OIDs
-        $cpuOid = '1.3.6.1.4.1.14988.1.1.3.10.0';
-        $memOid = '1.3.6.1.4.1.14988.1.1.3.11.0';
-        $clientsOid = '1.3.6.1.4.1.14988.1.1.3.12.0';
-        $bwUpOid = '1.3.6.1.2.1.2.2.1.16.2';
-        $bwDownOid = '1.3.6.1.2.1.2.2.1.10.2';
-        $uptimeOid = '1.3.6.1.2.1.1.3.0';
-
-        $cpu = $snmpFetch($cpuOid);
-        $memory = $snmpFetch($memOid);
-        $clients = $snmpFetch($clientsOid);
-        $bandwidthUp = $snmpFetch($bwUpOid);
-        $bandwidthDown = $snmpFetch($bwDownOid);
-
-        // Fetch uptime separately for better formatting
-        try {
-            $uptimeRaw = @snmp2_get($device->ip, $device->snmpCommunity, $uptimeOid);
-            if ($uptimeRaw !== false) {
-                // Extract Timeticks number: Timeticks: (835800) 2:19:18.00
-                if (preg_match('/\((\d+)\)/', $uptimeRaw, $matches)) {
-                    $ticks = intval($matches[1]);
-                    $seconds = intval($ticks / 100); // Timeticks = 1/100 sec
-                    $hours = floor($seconds / 3600);
-                    $minutes = floor(($seconds % 3600) / 60);
-                    $secs = $seconds % 60;
-                    $uptime = sprintf("%d:%02d:%02d", $hours, $minutes, $secs);
-                } else {
-                    $uptime = '-';
-                }
-            } else {
-                $uptime = '-';
-            }
-        } catch (\Exception $e) {
-            $uptime = '-';
         }
-
-        // Determine status based on online check (already done above)
-        $status = $isOnline ? 'online' : 'offline';
 
         return response()->json([
-            'status' => $status,  // Now dynamic, not hardcoded
+            'status' => 'online',
             'cpu' => $cpu,
             'memory' => $memory,
             'clients' => $clients,
-            'bandwidth' => [
-                'upload' => $bandwidthUp,
-                'download' => $bandwidthDown,
-            ],
+            'bandwidth' => ['upload' => 0, 'download' => 0],
             'uptime' => $uptime,
         ]);
     }
