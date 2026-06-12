@@ -216,9 +216,20 @@ class DeviceController extends Controller
         }
 
         // Check if device is online (ping)
-        if (!$this->isOnline($device, $device->ip)) {
+        $isOnline = $this->isOnline($device, $device->ip);
+
+        // If device is offline, return immediately
+        if (!$isOnline) {
             return response()->json([
                 'status' => 'offline',
+                'cpu' => 0,
+                'memory' => 0,
+                'clients' => 0,
+                'bandwidth' => [
+                    'upload' => 0,
+                    'download' => 0,
+                ],
+                'uptime' => '-',
                 'message' => 'Device is offline',
             ]);
         }
@@ -227,6 +238,14 @@ class DeviceController extends Controller
         if (!function_exists('snmp2_get')) {
             return response()->json([
                 'status' => 'online',
+                'cpu' => 0,
+                'memory' => 0,
+                'clients' => 0,
+                'bandwidth' => [
+                    'upload' => 0,
+                    'download' => 0,
+                ],
+                'uptime' => '-',
                 'message' => 'SNMP PHP extension not enabled',
             ], 500);
         }
@@ -279,8 +298,11 @@ class DeviceController extends Controller
             $uptime = '-';
         }
 
+        // Determine status based on online check (already done above)
+        $status = $isOnline ? 'online' : 'offline';
+
         return response()->json([
-            'status' => 'online',
+            'status' => $status,  // Now dynamic, not hardcoded
             'cpu' => $cpu,
             'memory' => $memory,
             'clients' => $clients,
