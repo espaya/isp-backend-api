@@ -96,9 +96,8 @@ class SubscriptionController extends Controller
                 return response()->json([
                     'message' => 'You already have an active subscription. Please wait until it expires before purchasing another plan.',
                     'active_subscription' => $existingSub
-                ], 409); // Conflict
+                ], 409);
             }
-
 
             $package = Packages::findOrFail($request->package_id);
 
@@ -110,7 +109,6 @@ class SubscriptionController extends Controller
                 'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
                 default   => throw new Exception('Invalid package type'),
             };
-
 
             // Create subscription
             $subscription = Subscription::create([
@@ -124,39 +122,39 @@ class SubscriptionController extends Controller
                 'is_renewable' => true,
             ]);
 
-            $selector = new DeviceSelectorService();
-
-            // You can get these from captive portal OR IP lookup
-            $lat = $request->latitude ?? null;
-            $lng = $request->longitude ?? null;
-
-            $device = $selector->selectBestDevice($lat, $lng);
+            // ✅ Get the first available device (no selector service)
+            $device = Device::first();
 
             if (!$device) {
-                throw new Exception('No available MikroTik device');
+                throw new Exception('No MikroTik device configured');
+            }
+
+            // Validate device credentials
+            if (empty($device->ip) || empty($device->api_user) || empty($device->api_password)) {
+                throw new Exception('MikroTik device missing required credentials');
             }
 
             $mikrotik = new MikrotikService($device);
 
-            // Create or update hotspot user
+            // Create hotspot user
             $hotspotPassword = Str::random(8);
 
             $mikrotik->createOrUpdateHotspotUser(
                 username: $user->email,
                 password: $hotspotPassword,
-                profile: $package->mikrotik_profile, // VERY IMPORTANT
+                profile: $package->mikrotik_profile,
                 expiresAt: $endsAt
             );
 
-            // sign user in to hotspot internet
+            // Sign user in to hotspot internet
             $mikrotik->loginUserToInternet(
                 username: $user->email,
                 password: $hotspotPassword,
-                ip: $request->input('ip'), // client's IP
-                mac: $request->input('mac') // client's MAC address
+                ip: $request->input('ip'),
+                mac: $request->input('mac')
             );
 
-            // track load
+            // Track load
             $device->increment('current_clients');
 
             DB::commit();
@@ -172,7 +170,7 @@ class SubscriptionController extends Controller
             ], 201);
         } catch (Exception $ex) {
             DB::rollBack();
-            Log::error($ex->getMessage());
+            Log::error('Subscription error: ' . $ex->getMessage());
 
             return response()->json([
                 'message' => 'Subscription failed',
@@ -256,9 +254,6 @@ class SubscriptionController extends Controller
             $user = Auth::user();
 
             if (!$user) return response()->json(['message' => 'Cannot identify current user'], 404);
-
-            // 🔥 Determine best / assigned device
-            $selector = new DeviceSelectorService();
 
             // Prefer saved subscription device
             $subscription = $user->subscriptions()
