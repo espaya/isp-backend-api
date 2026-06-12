@@ -301,7 +301,7 @@ class SubscriptionController extends Controller
 
             // Get the subscription for the logged-in user
             $subscription = Subscription::where('payment_id', $payment->id)
-                ->where('user_id', Auth::id())
+                // ->where('user_id', Auth::id())
                 ->first();
 
             if (!$subscription) {
