@@ -293,14 +293,14 @@ class SubscriptionController extends Controller
     {
         try {
             // Find the payment ID
-            $payment_id = Payment::where('reference', $reference)->value('id');
+            $payment = Payment::where('reference', $reference)->first();
 
-            if (!$payment_id) {
+            if (!$payment) {
                 return response()->json(['message' => 'Payment not found'], 404);
             }
 
             // Get the subscription for the logged-in user
-            $subscription = Subscription::where('payment_id', $payment_id)
+            $subscription = Subscription::where('payment_id', $payment->id)
                 ->where('user_id', Auth::id())
                 ->first();
 
