@@ -314,47 +314,28 @@ class DeviceController extends Controller
         ]);
     }
 
-    // private function isOnline(object $device, $ip = null)
-    // {
-    //     $ip = $ip ?? $device->ip;
-
-    //     if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-    //         return false;
-    //     }
-
-    //     // if (!$device->monitorEnabled) {
-    //     //     return true;
-    //     // }
-
-    //     try {
-    //         // Use the device itself to ping (it's the MikroTik)
-    //         $mikrotik = new \App\Services\MikrotikService($device);
-    //         $result = $mikrotik->ping($ip, 2);
-
-    //         return ($result['received'] ?? 0) > 0;
-    //     } catch (\Exception $e) {
-    //         Log::error("isOnline check failed: " . $e->getMessage());
-    //         return false;
-    //     }
-    // }
-
-    // Simple and efficient
-    public function isOnline(object $device, string $ip)
+    private function isOnline(object $device, $ip = null)
     {
-        // Use cached result to avoid excessive API calls
-        return Cache::remember("device_{$device->id}_online", 30, function () use ($device, $ip) {
-            try {
-                // Try TCP connect first (fast)
-                $socket = @fsockopen($ip, 8728, $errno, $errstr, 1);
-                if ($socket) {
-                    fclose($socket);
-                    return true;
-                }
-                return false;
-            } catch (\Exception $e) {
-                return false;
-            }
-        });
+        $ip = $ip ?? $device->ip;
+
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+
+        // if (!$device->monitorEnabled) {
+        //     return true;
+        // }
+
+        try {
+            // Use the device itself to ping (it's the MikroTik)
+            $mikrotik = new \App\Services\MikrotikService($device);
+            $result = $mikrotik->ping($ip, 2);
+
+            return ($result['received'] ?? 0) > 0;
+        } catch (\Exception $e) {
+            Log::error("isOnline check failed: " . $e->getMessage());
+            return false;
+        }
     }
 
     public function cardStats()
