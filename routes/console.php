@@ -15,6 +15,7 @@ use App\Jobs\EnforceDataLimits;
 use App\Jobs\CheckDeviceHealth;
 use App\Jobs\ChargeAuthorizationJob;
 use App\Jobs\AutoRenewSubscriptions;
+use App\Jobs\CheckDataUsageJob;
 use App\Jobs\RecordUsageJob;
 use App\Models\Device;
 use App\Services\SignalSyncService;
@@ -31,4 +32,5 @@ Schedule::call(function () {
 
 Schedule::job(new ChargeAuthorizationJob)->everyMinute();
 Schedule::job(new RecordUsageJob)->everyMinute();
+Schedule::job(new CheckDataUsageJob)->everyMinute();
 // Schedule::job(new AutoRenewSubscriptions)->everyMinute();

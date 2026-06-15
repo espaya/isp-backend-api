@@ -103,12 +103,16 @@ class SubscriptionController extends Controller
 
             $startsAt = Carbon::now();
 
-            $endsAt = match ($package->type) {
-                'daily'   => $startsAt->copy()->addDay()->subSecond(),
-                'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
-                'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
-                default   => throw new Exception('Invalid package type'),
-            };
+            // Calculate expiration based on validity (days)
+            $validityDays = (int) $package->validity;
+            $endsAt = $startsAt->copy()->addDays($validityDays)->subSecond();
+
+            // $endsAt = match ($package->type) {
+            //     'daily'   => $startsAt->copy()->addDay()->subSecond(),
+            //     'weekly'  => $startsAt->copy()->addDays(7)->subSecond(),
+            //     'monthly' => $startsAt->copy()->addDays(30)->subSecond(),
+            //     default   => throw new Exception('Invalid package type'),
+            // };
 
             // Create subscription
             $subscription = Subscription::create([
