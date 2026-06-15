@@ -41,7 +41,8 @@ class PackagesController extends Controller
             'isActive' => ['nullable', 'boolean'],
             'description' => ['required', 'string'],
             'devices' => ['nullable', 'numeric', 'min:1'],
-            'type' => ['required', 'string', 'in:daily,weekly,monthly,special']
+            'type' => ['required', 'string', 'in:daily,weekly,monthly,special'],
+            'mikrotik_profile' => ['required', 'string']
         ], [
             'name.required' => 'Package name is required.',
             'name.unique' => 'A package with this name already exists.',
@@ -61,7 +62,9 @@ class PackagesController extends Controller
 
             'type.required' => 'Package type is required',
             'type.string' => 'Type must be a valid string',
-            'type.in' => 'Invalid package type'
+            'type.in' => 'Invalid package type',
+            'mikrotik_profile.required' => 'This field is required',
+            'mikrotik_profile.string' => 'Invalid inputs'
         ]);
 
         DB::beginTransaction();
@@ -78,7 +81,8 @@ class PackagesController extends Controller
                 'validity' => $request->validity,
                 'description' => $request->description,
                 'devices' => $request->devices ? $request->devices : "Unlimited",
-                'type' => $request->type
+                'type' => $request->type,
+                'mikrotik_profile' => $request->mikrotik_profile
             ]);
 
             DB::commit();
@@ -129,7 +133,8 @@ class PackagesController extends Controller
             'isActive' => ['nullable', 'boolean'],
             'description' => ['required', 'string'],
             'devices' => ['nullable', 'numeric', 'min:1'],
-            'type' => ['required', 'string', 'in:daily,weekly,monthly,special']
+            'type' => ['required', 'string', 'in:daily,weekly,monthly,special'],
+            'mikrotik_profile' => ['required', 'string']
         ], [
             'name.required' => 'Package name is required.',
             'name.unique' => 'A package with this name already exists.',
@@ -149,7 +154,9 @@ class PackagesController extends Controller
 
             'type.required' => 'Package type is required',
             'type.string' => 'Type must be a valid string',
-            'type.in' => 'Invalid package type'
+            'type.in' => 'Invalid package type',
+            'mikrotik_profile.required' => 'This field is required',
+            'mikrotik_profile.string' => 'Invalid inputs'
         ]);
 
         DB::beginTransaction();
@@ -171,7 +178,8 @@ class PackagesController extends Controller
                 'isActive' => $request->isActive ?? 0, // default false if not set
                 'description' => $request->description,
                 'devices' => $request->devices ? $request->devices : "Unlimited",
-                'type' => $request->type
+                'type' => $request->type,
+                'mikrotik_profile' => $request->mikrotik_profile
             ]);
 
             if ($package->isDirty()) {
